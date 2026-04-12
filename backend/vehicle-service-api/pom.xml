@@ -173,17 +173,18 @@
             <plugin>
                 <groupId>org.web3j</groupId>
                 <artifactId>web3j-maven-plugin</artifactId>
-                <version>4.9.4</version> <configuration>
-                <packageName>com.vehicle.service.vehicleserviceapi.contracts</packageName>
-                <sourceDestination>${basedir}/src/main/java</sourceDestination>
-                <nativeJavaType>true</nativeJavaType>
-                <soliditySourceFiles>
-                    <directory>../blockchain/contracts</directory>
-                    <includes>
-                        <include>VehicleService.sol</include>
-                    </includes>
-                </soliditySourceFiles>
-            </configuration>
+                <version>4.9.4</version>
+                <configuration>
+                    <packageName>com.vehicle.service.vehicleserviceapi.contracts</packageName>
+                    <sourceDestination>${basedir}/src/main/java</sourceDestination>
+                    <nativeJavaType>true</nativeJavaType>
+                    <abiSourceFiles>
+                        <directory>../../blockchain/artifacts/contracts/VehicleService.sol</directory>
+                        <includes>
+                            <include>VehicleService.json</include>
+                        </includes>
+                    </abiSourceFiles>
+                </configuration>
             </plugin>
         </plugins>
     </build>
