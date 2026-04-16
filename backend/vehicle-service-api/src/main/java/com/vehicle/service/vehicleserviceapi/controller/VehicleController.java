@@ -9,6 +9,7 @@ import com.vehicle.service.vehicleserviceapi.service.BlockchainService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -24,6 +25,7 @@ public class VehicleController {
     private final UserRepository userRepository;
 
     @PostMapping("/register")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<?> registerVehicle(@RequestBody VehicleRequest request, Principal principal) {
         try {
             log.info("Реєстрація авто для користувача: {}", principal.getName());
@@ -52,5 +54,12 @@ public class VehicleController {
             log.error("Помилка реєстрації: ", e);
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
+    }
+
+    @GetMapping("/my")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<?> getMyVehicles(Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).get();
+        return ResponseEntity.ok(vehicleRepository.findAllByOwnerId(user.getId()));
     }
 }

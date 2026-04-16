@@ -7,8 +7,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.tx.gas.DefaultGasProvider;
+
+import java.math.BigInteger;
 
 
 @Slf4j
@@ -58,4 +61,15 @@ public class BlockchainService {
         log.info("Транзакція успішна! Hash: {}", receipt.getTransactionHash());
         return receipt.getTransactionHash();
     }
+    public String createServiceRequest(String vin, String description) throws Exception {
+        log.info("Виклик createRequest у блокчейні для VIN: {}", vin);
+
+        // В Solidity: createRequest(string memory _vin, string memory _requestPdfHash)
+        // Передаємо опис як "хеш" для тесту
+        String mockPdfHash = "DOC_" + System.currentTimeMillis();
+
+        TransactionReceipt receipt = contract.createRequest(vin, mockPdfHash).send();
+        return receipt.getTransactionHash();
+    }
+
 }
