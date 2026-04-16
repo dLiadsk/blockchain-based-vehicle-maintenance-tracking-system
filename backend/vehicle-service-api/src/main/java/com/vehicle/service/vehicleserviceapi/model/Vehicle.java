@@ -21,8 +21,9 @@ public class Vehicle {
 
     private String brand;
     private String model;
-    private String ownerName;
-
+    @ManyToOne
+    @JoinColumn(name = "owner_id")
+    private User owner;
     // Сюди ми запишемо Transaction Hash після успішного запису в блокчейн
     @Column(name = "blockchain_tx_hash")
     private String blockchainTxHash;
