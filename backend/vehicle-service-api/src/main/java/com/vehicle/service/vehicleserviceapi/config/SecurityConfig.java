@@ -37,11 +37,20 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Адмінка: тільки для ROLE_ADMIN
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // Функції СТО: тільки для ROLE_STO
+                        .requestMatchers("/api/sto/**").hasRole("STO")
+
+                        // Функції водія: тільки для ROLE_USER
+                        .requestMatchers("/api/vehicles/**", "/api/service-requests/create").hasRole("USER")
+
+                        // Публічні ендпоінти
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/vehicles/**").authenticated() // Тільки для залогінених
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 

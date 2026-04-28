@@ -1,6 +1,7 @@
 package com.vehicle.service.vehicleserviceapi;
 
 import com.vehicle.service.vehicleserviceapi.model.User;
+import com.vehicle.service.vehicleserviceapi.model.UserRole;
 import com.vehicle.service.vehicleserviceapi.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -18,16 +19,16 @@ public class VehicleServiceApiApplication {
     @Bean
     CommandLineRunner initDatabase(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
-            if (userRepository.findByEmail("sto@service.com").isEmpty()) {
-                User sto = new User();
-                sto.setEmail("sto@service.com");
-                sto.setPhoneNumber("+380123456789");
-                sto.setFirstName("Головний");
-                sto.setLastName("Сервіс");
-                sto.setPassword(passwordEncoder.encode("sto12345"));
-                sto.setRole("ROLE_STO");
-                userRepository.save(sto);
-                System.out.println(">>> СТО за замовчуванням створено: sto@service.com / sto12345");
+            // 1. Створюємо головного Адміна (якщо немає)
+            if (userRepository.findByEmail("admin@system.com").isEmpty()) {
+                User admin = new User();
+                admin.setEmail("admin@system.com");
+                admin.setPassword(passwordEncoder.encode("supersecure"));
+                admin.setRole(UserRole.ROLE_ADMIN);
+                admin.setFirstName("System");
+                admin.setLastName("Administrator");
+                userRepository.save(admin);
+                System.out.println(">>> Створено супер-адміна: admin@system.com / supersecure");
             }
         };
     }
