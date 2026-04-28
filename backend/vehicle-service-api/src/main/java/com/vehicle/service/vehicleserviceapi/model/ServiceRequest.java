@@ -21,11 +21,15 @@ public class ServiceRequest {
     private User customer;
 
     @ManyToOne
-    @JoinColumn(name = "sto_id")
-    private User sto; // СТО, до якого звернулися
+    @JoinColumn(name = "sto_profile_id", nullable = false)
+    private StoProfile stoProfile;
 
     private String description;
-    private String status; // наприклад: OPEN, IN_PROGRESS, COMPLETED, REJECTED
+    private String status;
     private LocalDateTime createdAt;
-    private String blockchainTxHash; // Хеш запису в блокчейні
+    private String blockchainTxHash;
+    private Long blockchainJobId;
+    private String pdfHash;
+    @Column(columnDefinition = "TEXT")
+    private String arrivalInstructions;
 }

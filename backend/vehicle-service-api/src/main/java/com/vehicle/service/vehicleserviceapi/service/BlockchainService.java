@@ -1,6 +1,7 @@
 package com.vehicle.service.vehicleserviceapi.service;
 
 import com.vehicle.service.vehicleserviceapi.contracts.VehicleService;
+import com.vehicle.service.vehicleserviceapi.dto.BlockchainResult;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,7 +35,6 @@ public class BlockchainService {
         try {
             Web3j web3j = Web3j.build(new HttpService(rpcUrl));
 
-            // РЕАЛЬНА ПЕРЕВІРКА: запитуємо версію клієнта
             String clientVersion = web3j.web3ClientVersion().send().getWeb3ClientVersion();
 
             Credentials credentials = Credentials.create(adminPrivateKey);
@@ -44,8 +44,7 @@ public class BlockchainService {
             log.info("Підключено до: {}", clientVersion);
         } catch (Exception e) {
             log.error("ПОМИЛКА: Не вдалося підключитися до Hardhat! Переконайтеся, що 'npx hardhat node' запущено.");
-            // Можна навіть зупинити додаток, якщо блокчейн критично важливий
-            // throw new RuntimeException("Blockchain connection failed");
+
         }
     }
 
@@ -55,21 +54,39 @@ public class BlockchainService {
     public String registerVehicle(String vin, String passportHash) throws Exception {
         log.info("Реєстрація авто з VIN: {}", vin);
 
-        // Викликаємо функцію смарт-контракту
         var receipt = contract.registerVehicle(vin, passportHash).send();
 
         log.info("Транзакція успішна! Hash: {}", receipt.getTransactionHash());
         return receipt.getTransactionHash();
     }
-    public String createServiceRequest(String vin, String description) throws Exception {
-        log.info("Виклик createRequest у блокчейні для VIN: {}", vin);
 
-        // В Solidity: createRequest(string memory _vin, string memory _requestPdfHash)
-        // Передаємо опис як "хеш" для тесту
-        String mockPdfHash = "DOC_" + System.currentTimeMillis();
 
-        TransactionReceipt receipt = contract.createRequest(vin, mockPdfHash).send();
-        return receipt.getTransactionHash();
+    public BlockchainResult createServiceRequest(String vin, String pdfHash) throws Exception {
+        log.info("Реєстрація заявки в блокчейні для VIN: {}", vin);
+
+        TransactionReceipt receipt = contract.createRequest(vin, pdfHash).send();
+
+        var events = contract.getStatusChangedEvents(receipt);
+        if (events.isEmpty()) {
+            throw new RuntimeException("Блокчейн не повернув jobId (івент не знайдено)");
+        }
+
+        Long jobId = events.get(0).jobId.longValue();
+        String txHash = receipt.getTransactionHash();
+
+        return new BlockchainResult(jobId, txHash);
     }
 
+    public String adminApprove(Long jobId) throws Exception {
+        log.info("СТО підтверджує заявку в блокчейні. Job ID: {}", jobId);
+        TransactionReceipt receipt = contract.adminApprove(BigInteger.valueOf(jobId)).send();
+        return receipt.getTransactionHash();
+    }
+    public String markArrival(Long jobId) throws Exception {
+        log.info("СТО фіксує прибуття автомобіля для замовлення №{}", jobId);
+
+        TransactionReceipt receipt = contract.markArrival(BigInteger.valueOf(jobId)).send();
+
+        return receipt.getTransactionHash();
+    }
 }
