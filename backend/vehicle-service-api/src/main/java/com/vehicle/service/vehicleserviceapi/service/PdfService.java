@@ -12,7 +12,6 @@ import java.util.HexFormat;
 @Service
 public class PdfService {
 
-    // Папка, куди будемо складати документи
     private final String STORAGE_PATH = "storage/requests/";
 
     public String generateAndSaveServiceRequestPdf(String vin, String description, String customerName, Long requestId) {
@@ -47,6 +46,35 @@ public class PdfService {
 
         } catch (Exception e) {
             throw new RuntimeException("Помилка генерації та збереження PDF", e);
+        }
+    }
+    public String generateAndSaveServiceRequestPdf(String vin, String description, String customerName) {
+        try {
+            java.nio.file.Files.createDirectories(java.nio.file.Paths.get(STORAGE_PATH));
+
+            // Використовуємо час замість requestId для унікальності імені файлу
+            String fileName = "req_" + vin + "_" + System.currentTimeMillis() + ".pdf";
+            String fullPath = STORAGE_PATH + fileName;
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            Document document = new Document();
+            PdfWriter.getInstance(document, out);
+
+            document.open();
+            document.add(new Paragraph("ОФІЦІЙНА ЗАЯВКА НА СТО"));
+            document.add(new Paragraph("VIN: " + vin));
+            document.add(new Paragraph("Клієнт: " + customerName));
+            document.add(new Paragraph("Опис проблеми: " + description));
+            document.add(new Paragraph("Дата: " + LocalDateTime.now()));
+            document.close();
+
+            byte[] pdfBytes = out.toByteArray();
+            java.nio.file.Files.write(java.nio.file.Paths.get(fullPath), pdfBytes);
+
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(pdfBytes);
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Помилка генерації PDF", e);
         }
     }
 }

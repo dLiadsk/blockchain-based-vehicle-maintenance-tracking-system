@@ -3,6 +3,9 @@ package com.vehicle.service.vehicleserviceapi.controller;
 import com.vehicle.service.vehicleserviceapi.dto.JwtResponse;
 import com.vehicle.service.vehicleserviceapi.dto.LoginRequest;
 import com.vehicle.service.vehicleserviceapi.dto.RegisterRequest;
+import com.vehicle.service.vehicleserviceapi.dto.UserResponse;
+import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
+import com.vehicle.service.vehicleserviceapi.model.User;
 import com.vehicle.service.vehicleserviceapi.service.AuthService;
 import com.vehicle.service.vehicleserviceapi.service.JwtCore;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +24,12 @@ public class AuthController {
     // Нам знадобиться AuthenticationManager для логіну, налаштуємо його в SecurityConfig
     private final AuthenticationManager authenticationManager;
     private final JwtCore jwtCore;
+    private final DtoMapper dtoMapper;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
-        authService.registerUser(request);
-        return ResponseEntity.ok("Власника авто зареєстровано успішно");
+    public ResponseEntity<UserResponse> register(@RequestBody RegisterRequest request) {
+        User user = authService.registerUser(request);
+        return ResponseEntity.ok(dtoMapper.toUserResponse(user));
     }
 
     @PostMapping("/login")

@@ -1,8 +1,6 @@
 package com.vehicle.service.vehicleserviceapi.service;
 
-import com.vehicle.service.vehicleserviceapi.dto.RegisterRequest;
-import com.vehicle.service.vehicleserviceapi.dto.StoAdminRequest;
-import com.vehicle.service.vehicleserviceapi.dto.StoProfileRequest;
+import com.vehicle.service.vehicleserviceapi.dto.*;
 import com.vehicle.service.vehicleserviceapi.model.StoProfile;
 import com.vehicle.service.vehicleserviceapi.model.User;
 import com.vehicle.service.vehicleserviceapi.model.UserRole;

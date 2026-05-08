@@ -2,6 +2,9 @@ package com.vehicle.service.vehicleserviceapi.controller;
 
 import com.vehicle.service.vehicleserviceapi.dto.StoAdminRequest;
 import com.vehicle.service.vehicleserviceapi.dto.StoProfileRequest;
+import com.vehicle.service.vehicleserviceapi.dto.UserResponse;
+import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
+import com.vehicle.service.vehicleserviceapi.model.User;
 import com.vehicle.service.vehicleserviceapi.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminController {
 
+    private final DtoMapper dtoMapper;
     private final AuthService authService;
 
     // Створення нової точки СТО (фізичної локації)
@@ -25,13 +29,9 @@ public class AdminController {
         return ResponseEntity.ok(authService.createStoProfile(request));
     }
 
-    // Реєстрація людини-адміністратора для конкретної точки
     @PostMapping("/register-sto-admin")
-    public ResponseEntity<?> registerStoAdmin(@RequestBody StoAdminRequest request) {
-        try {
-            return ResponseEntity.ok(authService.registerStoAdmin(request));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<UserResponse> registerStoAdmin(@RequestBody StoAdminRequest request) {
+        User admin = authService.registerStoAdmin(request);
+        return ResponseEntity.ok(dtoMapper.toUserResponse(admin));
     }
 }

@@ -1,9 +1,12 @@
 package com.vehicle.service.vehicleserviceapi.controller;
 
 import com.vehicle.service.vehicleserviceapi.dto.BlockchainResult;
-import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestDTO;
+import com.vehicle.service.vehicleserviceapi.dto.CreateServiceRequest;
+import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestResponse;
+import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
 import com.vehicle.service.vehicleserviceapi.model.*;
 import com.vehicle.service.vehicleserviceapi.repository.*;
+import com.vehicle.service.vehicleserviceapi.service.AuthService;
 import com.vehicle.service.vehicleserviceapi.service.BlockchainService;
 import com.vehicle.service.vehicleserviceapi.service.PdfService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/service-requests")
@@ -27,10 +32,12 @@ public class ServiceRequestController {
     private final StoProfileRepository stoProfileRepository;
     private final PdfService pdfService;
     private final BlockchainService blockchainService;
+    private final AuthService authService;
+    private final DtoMapper dtoMapper;
 
     @PostMapping("/create")
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<?> createRequest(@RequestBody ServiceRequestDTO dto, Principal principal) {
+    public ResponseEntity<?> createRequest(@RequestBody CreateServiceRequest dto, Principal principal) {
         try {
             User customer = userRepository.findByEmail(principal.getName())
                     .orElseThrow(() -> new RuntimeException("Поточного користувача не знайдено"));
@@ -45,14 +52,17 @@ public class ServiceRequestController {
             StoProfile stoProfile = stoProfileRepository.findById(dto.getStoId())
                     .orElseThrow(() -> new RuntimeException("Обране СТО не знайдено"));
 
-            String pdfHash = pdfService.generateServiceRequestPdfHash(
+            // 1. Генеруємо PDF та отримуємо його хеш
+            String pdfHash = pdfService.generateAndSaveServiceRequestPdf(
                     vehicle.getVin(),
                     dto.getDescription(),
                     customer.getFirstName() + " " + customer.getLastName()
             );
 
+            // 2. Запис у блокчейн (отримуємо рекорд із jobId та txHash)
             BlockchainResult result = blockchainService.createServiceRequest(vehicle.getVin(), pdfHash);
 
+            // 3. Збереження в базу даних
             ServiceRequest request = new ServiceRequest();
             request.setVehicle(vehicle);
             request.setCustomer(customer);
@@ -63,12 +73,13 @@ public class ServiceRequestController {
 
             request.setBlockchainJobId(result.jobId());
             request.setBlockchainTxHash(result.txHash());
-            request.setPdfHash(pdfHash);
+            request.setPdfHash(pdfHash); // Зберігаємо хеш PDF
 
             ServiceRequest savedRequest = requestRepository.save(request);
 
-            log.info("Заявку успішно зафіксовано. JobId: {}, PDF Hash: {}", result.jobId(), result.txHash());
-            return ResponseEntity.ok(savedRequest);
+            log.info("Заявку зафіксовано. JobId: {}, TxHash: {}", result.jobId(), result.txHash());
+
+            return ResponseEntity.ok(dtoMapper.toServiceRequestResponse(savedRequest));
 
         } catch (Exception e) {
             log.error("Помилка при створенні заявки: ", e);
@@ -79,8 +90,14 @@ public class ServiceRequestController {
     @GetMapping("/my")
     @PreAuthorize("hasRole('USER')")
     public ResponseEntity<?> getMyRequests(Principal principal) {
-        User user = userRepository.findByEmail(principal.getName()).get();
-        return ResponseEntity.ok(requestRepository.findAllByCustomerId(user.getId()));
+        User user = userRepository.findByEmail(principal.getName())
+                .orElseThrow(() -> new RuntimeException("Користувача не знайдено"));
+        List<ServiceRequest> requests = requestRepository.findAllByCustomerId(user.getId());
+        List<ServiceRequestResponse> responseList = requests.stream()
+                .map(dtoMapper::toServiceRequestResponse)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(responseList);
     }
 
     @GetMapping("/{id}")
@@ -97,9 +114,11 @@ public class ServiceRequestController {
                 request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
 
         if (isOwner || isTargetSto) {
-            return ResponseEntity.ok(request);
+            return ResponseEntity.ok(dtoMapper.toServiceRequestResponse(request));
         }
 
         return ResponseEntity.status(403).body("У вас немає доступу до перегляду цієї заявки");
     }
+
+
 }
