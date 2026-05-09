@@ -125,4 +125,23 @@ contract VehicleService {
     function getJob(uint256 _jobId) public view returns (RepairJob memory) {
         return repairJobs[_jobId];
     }
+    function confirmDepositPaid(uint256 _jobId, string memory _receiptHash) external onlyAdmin {
+        RepairJob storage job = repairJobs[_jobId];
+
+        require(job.status == Status.Inspected, "Job must be in Inspected status");
+
+        job.status = Status.DepositPaid;
+        job.receiptPdfHash = _receiptHash;
+
+        emit StatusChanged(_jobId, Status.DepositPaid, "Manual payment confirmed by admin");
+    }
+    function payDepositOnline(uint256 _jobId, string memory _receiptHash) external onlyAdmin {
+        RepairJob storage job = repairJobs[_jobId];
+        require(job.status == Status.Inspected, "Status must be Inspected");
+
+        job.status = Status.DepositPaid;
+        job.receiptPdfHash = _receiptHash;
+
+        emit StatusChanged(_jobId, Status.DepositPaid, "Online payment confirmed");
+    }
 }

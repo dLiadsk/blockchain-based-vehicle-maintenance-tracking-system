@@ -32,4 +32,8 @@ public class ServiceRequest {
     private String pdfHash;
     @Column(columnDefinition = "TEXT")
     private String arrivalInstructions;
+    private Long totalAmount;      // Загальна вартість ремонту
+    private Long depositAmount;    // Сума обов'язкового депозиту
+    private String inspectionPdfHash; // Хеш другого PDF (Акт огляду)
+    private String paymentReceiptPdfHash; // Хеш чека про оплату депозиту
 }

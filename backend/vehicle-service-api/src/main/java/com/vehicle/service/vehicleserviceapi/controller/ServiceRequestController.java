@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -32,7 +33,6 @@ public class ServiceRequestController {
     private final StoProfileRepository stoProfileRepository;
     private final PdfService pdfService;
     private final BlockchainService blockchainService;
-    private final AuthService authService;
     private final DtoMapper dtoMapper;
 
     @PostMapping("/create")
@@ -119,6 +119,36 @@ public class ServiceRequestController {
 
         return ResponseEntity.status(403).body("У вас немає доступу до перегляду цієї заявки");
     }
+    @PostMapping("/{requestId}/pay-online")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<?> payOnline(@PathVariable Long requestId, Principal principal) {
+        try {
+            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
 
+            log.info("Клієнт {} оплачує онлайн заявку {}", principal.getName(), requestId);
+            String fakeTransactionId = "PAY-" + UUID.randomUUID().toString().substring(0, 8);
+
+            String receiptHash = pdfService.generateOnlineReceiptPdf(
+                    request.getId(),
+                    request.getVehicle().getVin(),
+                    request.getDepositAmount(),
+                    fakeTransactionId
+            );
+
+            String txHash = blockchainService.payDepositOnline(
+                    request.getBlockchainJobId(),
+                    receiptHash
+            );
+
+            request.setStatus("DepositPaid");
+            request.setPaymentReceiptPdfHash(receiptHash);
+            request.setBlockchainTxHash(txHash);
+            requestRepository.save(request);
+
+            return ResponseEntity.ok("Оплата успішна. Статус в блокчейні оновлено.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Помилка оплати: " + e.getMessage());
+        }
+    }
 
 }

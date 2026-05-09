@@ -89,4 +89,36 @@ public class BlockchainService {
 
         return receipt.getTransactionHash();
     }
+    public String setInspectionResult(Long jobId, Long total, Long deposit, String pdfHash) throws Exception {
+        log.info("Фіксація результатів огляду в блокчейні для Job ID: {}", jobId);
+
+        TransactionReceipt receipt = contract.setInspectionResult(
+                BigInteger.valueOf(jobId),
+                BigInteger.valueOf(total),
+                BigInteger.valueOf(deposit),
+                pdfHash
+        ).send();
+
+        return receipt.getTransactionHash();
+    }
+    public String confirmDepositPaid(Long jobId, String receiptHash) throws Exception {
+        log.info("Адмін підтверджує оплату депозиту для Job ID: {}", jobId);
+
+        TransactionReceipt receipt = contract.confirmDepositPaid(
+                BigInteger.valueOf(jobId),
+                receiptHash
+        ).send();
+
+        return receipt.getTransactionHash();
+    }
+    public String payDepositOnline(Long jobId, String receiptHash) throws Exception {
+        log.info("Виклик блокчейну: онлайн-оплата депозиту для Job ID: {}", jobId);
+        TransactionReceipt receipt = contract.payDepositOnline(
+                BigInteger.valueOf(jobId),
+                receiptHash
+        ).send();
+
+        log.info("Транзакція онлайн-оплати успішна: {}", receipt.getTransactionHash());
+        return receipt.getTransactionHash();
+    }
 }
