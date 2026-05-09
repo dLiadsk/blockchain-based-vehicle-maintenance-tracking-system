@@ -36,4 +36,5 @@ public class ServiceRequest {
     private Long depositAmount;    // Сума обов'язкового депозиту
     private String inspectionPdfHash; // Хеш другого PDF (Акт огляду)
     private String paymentReceiptPdfHash; // Хеш чека про оплату депозиту
+    private String workReportPdfHash;
 }

@@ -3,6 +3,7 @@ package com.vehicle.service.vehicleserviceapi.controller;
 import com.vehicle.service.vehicleserviceapi.dto.ApproveRequest;
 import com.vehicle.service.vehicleserviceapi.dto.InspectionRequest;
 import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestResponse;
+import com.vehicle.service.vehicleserviceapi.dto.WorkReportRequest;
 import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
 import com.vehicle.service.vehicleserviceapi.model.*;
 import com.vehicle.service.vehicleserviceapi.repository.*;
@@ -188,6 +189,62 @@ public class StoController {
             requestRepository.save(serviceRequest);
 
             return ResponseEntity.ok("Оплату підтверджено. Можна починати ремонт.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
+    @PostMapping("/start-repair/{requestId}")
+    @PreAuthorize("hasRole('STO')")
+    public ResponseEntity<?> startRepair(@PathVariable Long requestId, Principal principal) {
+        try {
+            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
+
+            User currentUser = userRepository.findByEmail(principal.getName()).get();
+            if (!request.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
+                return ResponseEntity.status(403).body("Немає доступу до цієї заявки");
+            }
+
+            String txHash = blockchainService.startRepair(request.getBlockchainJobId());
+
+            request.setStatus("WorkInProgress");
+            request.setBlockchainTxHash(txHash);
+            requestRepository.save(request);
+
+            log.info("Ремонт авто {} (VIN: {}) розпочато", request.getId(), request.getVehicle().getVin());
+            return ResponseEntity.ok("Статус змінено на 'В роботі'");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Помилка: " + e.getMessage());
+        }
+    }
+    @PostMapping("/complete-repair/{requestId}")
+    @PreAuthorize("hasRole('STO')")
+    public ResponseEntity<?> completeRepair(
+            @PathVariable Long requestId,
+            @RequestBody WorkReportRequest reportDto,
+            Principal principal) {
+        try {
+            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
+
+            String reportHash = pdfService.generateWorkReportPdf(
+                    request.getVehicle().getVin(),
+                    reportDto.getItems(),
+                    reportDto.getFinalTotalAmount()
+            );
+
+            String txHash = blockchainService.completeRepair(
+                    request.getBlockchainJobId(),
+                    reportHash,
+                    reportDto.getFinalTotalAmount()
+            );
+
+            request.setStatus("ReadyForPickup");
+            request.setWorkReportPdfHash(reportHash);
+            request.setTotalAmount(reportDto.getFinalTotalAmount());
+            request.setBlockchainTxHash(txHash);
+
+            requestRepository.save(request);
+
+            return ResponseEntity.ok("Ремонт завершено. Клієнта повідомлено про фінальну вартість.");
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }

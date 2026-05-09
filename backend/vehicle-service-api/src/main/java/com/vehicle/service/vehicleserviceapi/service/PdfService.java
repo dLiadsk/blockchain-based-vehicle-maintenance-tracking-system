@@ -2,14 +2,22 @@ package com.vehicle.service.vehicleserviceapi.service;
 
 import com.itextpdf.text.Document;
 import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
+import com.vehicle.service.vehicleserviceapi.dto.WorkItem;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.List;
 
 @Service
+@Slf4j
 public class PdfService {
 
     private final String STORAGE_PATH = "storage/requests/";
@@ -153,6 +161,60 @@ public class PdfService {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(out.toByteArray()));
         } catch (Exception e) {
             throw new RuntimeException("Помилка генерації онлайн-чека", e);
+        }
+    }
+    public String generateWorkReportPdf(String vin, List<WorkItem> items, Long finalTotal) {
+        try {
+            String fileName = "work_report_" + vin + "_" + System.currentTimeMillis() + ".pdf";
+            String fullPath = STORAGE_PATH + fileName;
+
+            Document document = new Document();
+            PdfWriter.getInstance(document, new FileOutputStream(fullPath));
+            document.open();
+
+            document.add(new Paragraph("АКТ ВИКОНАНИХ РОБІТ ТА ВИКОРИСТАНИХ ЗАПЧАСТИН"));
+            document.add(new Paragraph("VIN: " + vin));
+            document.add(new Paragraph(" ")); // Відступ
+
+            // Створюємо таблицю на 4 колонки
+            PdfPTable table = new PdfPTable(4);
+            table.addCell("Назва");
+            table.addCell("К-ть");
+            table.addCell("Ціна за од.");
+            table.addCell("Всього");
+
+            for (WorkItem item : items) {
+                table.addCell(item.getDescription());
+                table.addCell(String.valueOf(item.getQuantity()));
+                table.addCell(item.getUnitPrice() + " грн");
+                table.addCell(item.getTotalPrice() + " грн");
+            }
+            document.add(table);
+
+            document.add(new Paragraph(" "));
+            document.add(new Paragraph("ФІНАЛЬНА СУМА ДО ОПЛАТИ: " + finalTotal + " грн"));
+            document.add(new Paragraph("Дата завершення: " + LocalDateTime.now()));
+            document.close();
+
+            return calculateFileHash(fullPath); // Твій метод для SHA-256
+        } catch (Exception e) {
+            throw new RuntimeException("Помилка генерації звіту", e);
+        }
+    }
+    private String calculateFileHash(String filePath) {
+        try {
+            // Читаємо всі байти файлу
+            byte[] fileBytes = Files.readAllBytes(Paths.get(filePath));
+
+            // Створюємо екземпляр SHA-256
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(fileBytes);
+
+            // Конвертуємо байти в Hex-рядок (зручний для читання формат)
+            return HexFormat.of().formatHex(hashBytes);
+        } catch (Exception e) {
+            log.error("Помилка при розрахунку хешу файлу: {}", filePath, e);
+            throw new RuntimeException("Не вдалося створити цифровий підпис документа");
         }
     }
 }

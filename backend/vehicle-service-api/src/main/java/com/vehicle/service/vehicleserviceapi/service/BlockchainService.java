@@ -121,4 +121,22 @@ public class BlockchainService {
         log.info("Транзакція онлайн-оплати успішна: {}", receipt.getTransactionHash());
         return receipt.getTransactionHash();
     }
+    public String startRepair(Long jobId) throws Exception {
+        log.info("Блокчейн: початок ремонту для Job ID: {}", jobId);
+
+        TransactionReceipt receipt = contract.startRepair(BigInteger.valueOf(jobId)).send();
+
+        return receipt.getTransactionHash();
+    }
+    public String completeRepair(Long jobId, String workReportHash, Long finalTotal) throws Exception {
+        log.info("Блокчейн: завершення ремонту для Job ID: {}. Фінальна сума: {} грн", jobId, finalTotal);
+        TransactionReceipt receipt = contract.completeRepair(
+                BigInteger.valueOf(jobId),
+                workReportHash,
+                BigInteger.valueOf(finalTotal)
+        ).send();
+
+        log.info("Транзакція завершення ремонту успішна: {}", receipt.getTransactionHash());
+        return receipt.getTransactionHash();
+    }
 }

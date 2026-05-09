@@ -95,13 +95,16 @@ contract VehicleService {
         emit StatusChanged(_jobId, Status.DepositPaid, "");
     }
 
-    function completeRepair(uint256 _jobId, string memory _workReportHash) public onlyAdmin {
-        require(repairJobs[_jobId].status == Status.DepositPaid, "No deposit");
-        repairJobs[_jobId].status = Status.ReadyForPickup;
-        repairJobs[_jobId].workReportPdfHash = _workReportHash;
-        emit StatusChanged(_jobId, Status.ReadyForPickup, "");
-    }
+    function completeRepair(uint256 _jobId, string memory _workReportHash, uint256 _finalTotal) public onlyAdmin {
+        require(repairJobs[_jobId].status == Status.WorkInProgress, "Repair not started");
 
+        RepairJob storage job = repairJobs[_jobId];
+        job.status = Status.ReadyForPickup;
+        job.workReportPdfHash = _workReportHash;
+        job.estimatedTotal = _finalTotal;
+
+        emit StatusChanged(_jobId, Status.ReadyForPickup, "Repair finished. Final price updated.");
+    }
     function finalizeJob(uint256 _jobId, string memory _receiptHash) public onlyAdmin {
         require(repairJobs[_jobId].status == Status.ReadyForPickup, "Not ready");
         repairJobs[_jobId].status = Status.Finalized;
@@ -143,5 +146,12 @@ contract VehicleService {
         job.receiptPdfHash = _receiptHash;
 
         emit StatusChanged(_jobId, Status.DepositPaid, "Online payment confirmed");
+    }
+    function startRepair(uint256 _jobId) public onlyAdmin {
+        require(repairJobs[_jobId].status == Status.DepositPaid, "Deposit not paid yet");
+
+        repairJobs[_jobId].status = Status.WorkInProgress;
+
+        emit StatusChanged(_jobId, Status.WorkInProgress, "Mechanic started working on the vehicle");
     }
 }
