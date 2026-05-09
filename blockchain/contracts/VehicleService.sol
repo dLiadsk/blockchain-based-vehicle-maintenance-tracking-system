@@ -109,7 +109,7 @@ contract VehicleService {
         require(repairJobs[_jobId].status == Status.ReadyForPickup, "Not ready");
         repairJobs[_jobId].status = Status.Finalized;
         repairJobs[_jobId].receiptPdfHash = _receiptHash;
-        emit StatusChanged(_jobId, Status.Finalized, "");
+        emit StatusChanged(_jobId, Status.Finalized, "Vehicle picked up by owner");
     }
 
     function rejectRequest(uint256 _jobId, string memory _reason) public onlyAdmin {

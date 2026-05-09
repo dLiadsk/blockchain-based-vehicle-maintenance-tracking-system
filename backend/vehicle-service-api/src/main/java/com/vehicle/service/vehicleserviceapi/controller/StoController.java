@@ -249,4 +249,44 @@ public class StoController {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
     }
+    @PostMapping("/finalize/{requestId}")
+    @PreAuthorize("hasRole('STO')")
+    public ResponseEntity<?> finalizeJob(@PathVariable Long requestId, Principal principal) {
+        try {
+            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
+
+            // Перевірка прав СТО
+            User currentUser = userRepository.findByEmail(principal.getName()).get();
+            if (!request.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
+                return ResponseEntity.status(403).body("Немає доступу");
+            }
+
+            // 1. Генеруємо фінальний PDF-чек
+            String finalReceiptHash = pdfService.generateFinalReceiptPdf(
+                    request.getId(),
+                    request.getVehicle().getVin(),
+                    request.getTotalAmount(),
+                    request.getDepositAmount()
+            );
+
+            // 2. Фіксуємо фіналізацію в блокчейні
+            String txHash = blockchainService.finalizeJob(
+                    request.getBlockchainJobId(),
+                    finalReceiptHash
+            );
+
+            // 3. Оновлюємо статус у БД
+            request.setStatus("Finalized");
+            request.setPaymentReceiptPdfHash(finalReceiptHash); // Перезаписуємо або додаємо нове поле
+            request.setBlockchainTxHash(txHash);
+
+            requestRepository.save(request);
+
+            log.info("Заявка {} успішно завершена. Клієнт забрав авто.", requestId);
+            return ResponseEntity.ok("Заявку закрито. Дякуємо за роботу!");
+        } catch (Exception e) {
+            log.error("Помилка фіналізації: ", e);
+            return ResponseEntity.internalServerError().body(e.getMessage());
+        }
+    }
 }

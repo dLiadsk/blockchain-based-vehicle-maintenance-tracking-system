@@ -217,4 +217,31 @@ public class PdfService {
             throw new RuntimeException("Не вдалося створити цифровий підпис документа");
         }
     }
+    public String generateFinalReceiptPdf(Long requestId, String vin, Long total, Long deposit) {
+        try {
+            String fileName = "final_receipt_" + requestId + ".pdf";
+            String fullPath = STORAGE_PATH + fileName;
+
+            Document document = new Document();
+            PdfWriter.getInstance(document, new FileOutputStream(fullPath));
+            document.open();
+
+            document.add(new Paragraph("ФІНАЛЬНИЙ ЧЕК ПРО ПОВНУ ОПЛАТУ"));
+            document.add(new Paragraph("Заявка №: " + requestId));
+            document.add(new Paragraph("VIN: " + vin));
+            document.add(new Paragraph("-----------------------------------"));
+            document.add(new Paragraph("Загальна сума: " + total + " грн"));
+            document.add(new Paragraph("Сплачено раніше (депозит): " + deposit + " грн"));
+            document.add(new Paragraph("Сплачено при отриманні: " + (total - deposit) + " грн"));
+            document.add(new Paragraph("-----------------------------------"));
+            document.add(new Paragraph("СТАТУС: ОПЛАЧЕНО ПОВНІСТЮ"));
+            document.add(new Paragraph("Дата видачі авто: " + LocalDateTime.now()));
+
+            document.close();
+
+            return calculateFileHash(fullPath); // Використовуємо наш метод хешування
+        } catch (Exception e) {
+            throw new RuntimeException("Помилка генерації фінального чека", e);
+        }
+    }
 }

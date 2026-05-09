@@ -139,4 +139,14 @@ public class BlockchainService {
         log.info("Транзакція завершення ремонту успішна: {}", receipt.getTransactionHash());
         return receipt.getTransactionHash();
     }
+    public String finalizeJob(Long jobId, String finalReceiptHash) throws Exception {
+        log.info("Блокчейн: фіналізація заявки ID: {}", jobId);
+
+        TransactionReceipt receipt = contract.finalizeJob(
+                BigInteger.valueOf(jobId),
+                finalReceiptHash
+        ).send();
+
+        return receipt.getTransactionHash();
+    }
 }
