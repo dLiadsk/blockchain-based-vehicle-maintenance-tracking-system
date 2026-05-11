@@ -1,9 +1,13 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.*;
 
+/**
+ * Wrapper for the authentication token.
+ */
 @Data
+@Builder
+@NoArgsConstructor
 @AllArgsConstructor
 public class JwtResponse {
     private String token;

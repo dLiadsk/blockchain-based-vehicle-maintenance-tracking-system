@@ -8,60 +8,129 @@ import com.vehicle.service.vehicleserviceapi.repository.StoProfileRepository;
 import com.vehicle.service.vehicleserviceapi.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-
+/**
+ * Service responsible for user authentication, registration,
+ * and management of STO profiles and their administrators.
+ * Part of the "Blockchain-based Vehicle Maintenance Tracking System".
+ */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AuthService {
-    private final UserRepository userRepository;
-    private final StoProfileRepository stoProfileRepository;
-    private final PasswordEncoder passwordEncoder;
 
+    private final UserRepository userRepository;
+    private final AuthenticationManager authenticationManager;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtCore jwtCore;
+    private final StoProfileRepository stoProfileRepository;
+
+    /**
+     * Authenticates a user and generates a JWT.
+     *
+     * @param request Login credentials (email and password).
+     * @return JwtResponse containing the generated access token.
+     */
+    public JwtResponse login(LoginRequest request) {
+        log.info("Authentication attempt for email: {}", request.getEmail());
+
+        Authentication auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+        );
+
+        String token = jwtCore.generateToken(auth);
+        log.info("User {} successfully authenticated", request.getEmail());
+
+        return new JwtResponse(token);
+    }
+
+    /**
+     * Registers a new regular user (Driver) in the system.
+     *
+     * @param request Registration details.
+     * @return The saved User entity.
+     */
     @Transactional
     public User registerUser(RegisterRequest request) {
-        // Перевірка унікальності пошти
+        log.info("Attempting to register new user: {}", request.getEmail());
+
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Користувач з такою поштою вже існує");
+            log.warn("Registration failed: Email {} is already taken", request.getEmail());
+            throw new RuntimeException("Email already registered");
         }
 
         if (userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
-            throw new RuntimeException("Цей номер телефону вже використовується");
+            log.warn("Registration failed: Phone number {} is already in use", request.getPhoneNumber());
+            throw new RuntimeException("Phone number already in use");
         }
 
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPhoneNumber(request.getPhoneNumber());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setRole(UserRole.ROLE_USER);
-        user.setStoProfile(null);       
+        User user = User.builder()
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .phoneNumber(request.getPhoneNumber())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .role(UserRole.ROLE_USER)
+                .build();
 
         return userRepository.save(user);
     }
 
+    /**
+     * Creates a new Service Station (STO) profile.
+     *
+     * @param request STO profile details.
+     * @return The saved StoProfile entity.
+     */
+    @Transactional
     public StoProfile createStoProfile(StoProfileRequest request) {
-        StoProfile profile = new StoProfile();
-        profile.setStationName(request.getStationName());
-        profile.setAddress(request.getAddress());
+        log.info("Creating new STO profile: {}", request.getStationName());
+
+        StoProfile profile = StoProfile.builder()
+                .stationName(request.getStationName())
+                .address(request.getAddress())
+                .city(request.getCity())
+                .region(request.getRegion())
+                .description(request.getDescription())
+                .serviceTypes(request.getServiceTypes())
+                .build();
+
         return stoProfileRepository.save(profile);
     }
 
+    /**
+     * Registers a new administrator and links them to a specific STO profile.
+     *
+     * @param request Admin credentials and associated STO ID.
+     * @return The saved administrator User entity.
+     */
+    @Transactional
     public User registerStoAdmin(StoAdminRequest request) {
+        log.info("Registering STO admin for station ID: {}", request.getStoId());
+
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Адміністратор з такою поштою вже існує");
+            log.error("Admin registration failed: Email {} already exists", request.getEmail());
+            throw new RuntimeException("Administrator with this email already exists");
         }
 
         StoProfile profile = stoProfileRepository.findById(request.getStoId())
-                .orElseThrow(() -> new RuntimeException("Профіль СТО не знайдено"));
+                .orElseThrow(() -> {
+                    log.error("Admin registration failed: STO profile ID {} not found", request.getStoId());
+                    return new RuntimeException("STO profile not found");
+                });
 
-        User admin = new User();
-        admin.setEmail(request.getEmail());
-        admin.setPassword(passwordEncoder.encode(request.getPassword()));
-        admin.setRole(UserRole.ROLE_STO);
-        admin.setStoProfile(profile); // Прив'язка до СТО
+        User admin = User.builder()
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .role(UserRole.ROLE_STO)
+                .stoProfile(profile)
+                .build();
 
         return userRepository.save(admin);
     }

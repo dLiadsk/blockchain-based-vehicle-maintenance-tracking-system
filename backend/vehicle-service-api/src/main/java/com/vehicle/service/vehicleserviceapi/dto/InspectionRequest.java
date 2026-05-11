@@ -1,11 +1,17 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.Data;
-import java.util.List;
+import lombok.*;
 
+/**
+ * DTO used by STO admins to record technical inspection findings and estimated costs.
+ */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class InspectionRequest {
     private Long totalAmount;
     private Long depositAmount;
-    private String findings; // Опис знайдених несправностей та перелік робіт
+    /** Detailed description of technical findings and required spare parts. */
+    private String findings;
 }

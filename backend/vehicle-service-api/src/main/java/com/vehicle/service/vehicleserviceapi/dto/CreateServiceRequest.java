@@ -1,10 +1,19 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.Data;
+import lombok.*;
 
+/**
+ * DTO used by customers to initiate a new service request for a vehicle.
+ */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CreateServiceRequest {
-    private String vin;        // VIN автомобіля
-    private Long stoId;        // ID обраного СТО з бази даних
-    private String description; // Опис проблеми
+    /** Vehicle Identification Number (VIN). */
+    private String vin;
+    /** Database ID of the selected service station. */
+    private Long stoId;
+    /** Detailed description of the mechanical issue or required maintenance. */
+    private String description;
 }

@@ -15,6 +15,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Main security configuration class for the application.
+ * Defines authentication mechanisms, authorization rules, and stateless session management.
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -23,35 +27,47 @@ public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
 
+    /**
+     * Bean for password encoding using the BCrypt hashing algorithm.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Exposes the AuthenticationManager bean for use in authentication services.
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
 
+    /**
+     * Configures the security filter chain.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .csrf(AbstractHttpConfigurer::disable) // CSRF is disabled as we use stateless JWT
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Адмінка: тільки для ROLE_ADMIN
+                        // Admin endpoints: Restricted to users with ADMIN role
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                        // Функції СТО: тільки для ROLE_STO
+                        // Service Station (STO) functions: Restricted to users with STO role
                         .requestMatchers("/api/sto/**").hasRole("STO")
 
-                        // Функції водія: тільки для ROLE_USER
+                        // Driver (User) functions: Restricted to users with USER role
                         .requestMatchers("/api/vehicles/**", "/api/service-requests/create").hasRole("USER")
 
-                        // Публічні ендпоінти
+                        // Public endpoints: Accessible by anyone (authentication, registration)
                         .requestMatchers("/api/auth/**").permitAll()
+
+                        // Any other request must be authenticated
                         .anyRequest().authenticated()
                 )
+                // Inject our custom JWT filter before the standard UsernamePasswordAuthenticationFilter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

@@ -1,14 +1,7 @@
 package com.vehicle.service.vehicleserviceapi.controller;
 
-import com.vehicle.service.vehicleserviceapi.dto.ApproveRequest;
-import com.vehicle.service.vehicleserviceapi.dto.InspectionRequest;
-import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestResponse;
-import com.vehicle.service.vehicleserviceapi.dto.WorkReportRequest;
-import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
-import com.vehicle.service.vehicleserviceapi.model.*;
-import com.vehicle.service.vehicleserviceapi.repository.*;
-import com.vehicle.service.vehicleserviceapi.service.BlockchainService;
-import com.vehicle.service.vehicleserviceapi.service.PdfService;
+import com.vehicle.service.vehicleserviceapi.dto.*;
+import com.vehicle.service.vehicleserviceapi.service.StoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -17,8 +10,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
-import java.util.stream.Collectors;
 
+/**
+ * Controller for Service Station (STO) operations.
+ * Actions are restricted to users with the 'STO' role.
+ */
 @RestController
 @RequestMapping("/api/sto")
 @PreAuthorize("hasRole('STO')")
@@ -26,267 +22,52 @@ import java.util.stream.Collectors;
 @Slf4j
 public class StoController {
 
-    private final ServiceRequestRepository requestRepository;
-    private final UserRepository userRepository;
-    private final BlockchainService blockchainService;
-    private final DtoMapper dtoMapper;
-    private final PdfService pdfService;
+    private final StoService stoService;
 
     @GetMapping("/requests")
-    public ResponseEntity<?> getMyStationRequests(Principal principal) {
-        User currentUser = userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new RuntimeException("Адміна не знайдено"));
-
-        List<ServiceRequest> requests = requestRepository.findAllByStoProfileId(currentUser.getStoProfile().getId());
-
-        // 3. Мапимо список сутностей у список чистих DTO
-        List<ServiceRequestResponse> responseList = requests.stream()
-                .map(dtoMapper::toServiceRequestResponse) // Використовуємо метод конвертації
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(responseList);
+    public ResponseEntity<List<ServiceRequestResponse>> getMyStationRequests(Principal principal) {
+        return ResponseEntity.ok(stoService.getStationRequests(principal.getName()));
     }
 
     @PostMapping("/approve/{requestId}")
-    public ResponseEntity<?> approveRequest(
-            @PathVariable Long requestId,
-            @RequestBody ApproveRequest approveDto, // Приймаємо коментар
-            Principal principal) {
-        try {
-            ServiceRequest serviceRequest = requestRepository.findById(requestId)
-                    .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
-
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-
-            // Перевірка власності заявки
-            if (!serviceRequest.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Це не ваша заявка");
-            }
-
-            String txHash = blockchainService.adminApprove(serviceRequest.getBlockchainJobId());
-
-            serviceRequest.setStatus("AcceptedByAdmin");
-            serviceRequest.setBlockchainTxHash(txHash);
-
-            String fullInstructions = "Адреса СТО: " + serviceRequest.getStoProfile().getAddress() +
-                    ". Коментар: " + approveDto.getMessage();
-
-            serviceRequest.setArrivalInstructions(fullInstructions);
-
-            requestRepository.save(serviceRequest);
-
-            return ResponseEntity.ok("Заявку підтверджено. Клієнт отримав інструкції.");
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<String> approveRequest(@PathVariable Long requestId, @RequestBody ApproveRequest dto, Principal principal) throws Exception {
+        stoService.approveRequest(requestId, dto, principal.getName());
+        return ResponseEntity.ok("Request approved. Instructions sent to customer.");
     }
 
     @PostMapping("/mark-arrival/{requestId}")
-    public ResponseEntity<?> markArrival(@PathVariable Long requestId, Principal principal) {
-        try {
-            ServiceRequest serviceRequest = requestRepository.findById(requestId)
-                    .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
-
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-            if (!serviceRequest.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Ви не можете фіксувати прибуття на чужу станцію");
-            }
-
-            // Перевірка поточного статусу в БД (логічно фіксувати приїзд тільки після підтвердження)
-            if (!"AcceptedByAdmin".equals(serviceRequest.getStatus())) {
-                return ResponseEntity.badRequest().body("Заявка ще не підтверджена або вже в роботі");
-            }
-
-            String txHash = blockchainService.markArrival(serviceRequest.getBlockchainJobId());
-
-            serviceRequest.setStatus("VehicleArrived");
-            serviceRequest.setBlockchainTxHash(txHash);
-            requestRepository.save(serviceRequest);
-
-            log.info("Автомобіль для заявки {} прибув. Tx: {}", requestId, txHash);
-            return ResponseEntity.ok("Прибуття автомобіля успішно зафіксовано.");
-        } catch (Exception e) {
-            log.error("Помилка фіксації прибуття: ", e);
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<String> markArrival(@PathVariable Long requestId, Principal principal) throws Exception {
+        stoService.markArrival(requestId, principal.getName());
+        return ResponseEntity.ok("Vehicle arrival recorded.");
     }
 
     @PostMapping("/inspection/{requestId}")
-    public ResponseEntity<?> setInspectionResult(
-            @PathVariable Long requestId,
-            @RequestBody InspectionRequest inspectionDto,
-            Principal principal) {
-        try {
-            ServiceRequest serviceRequest = requestRepository.findById(requestId)
-                    .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
-
-            // Перевірка прав СТО
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-            if (!serviceRequest.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Ви не можете проводити огляд для іншої станції");
-            }
-
-            // 1. Генеруємо PDF Акта огляду та отримуємо його хеш
-            String inspectionHash = pdfService.generateInspectionPdf(
-                    serviceRequest.getVehicle().getVin(),
-                    inspectionDto.getFindings(),
-                    inspectionDto.getTotalAmount(),
-                    inspectionDto.getDepositAmount()
-            );
-
-            // 2. Записуємо в блокчейн
-            String txHash = blockchainService.setInspectionResult(
-                    serviceRequest.getBlockchainJobId(),
-                    inspectionDto.getTotalAmount(),
-                    inspectionDto.getDepositAmount(),
-                    inspectionHash
-            );
-
-            // 3. Оновлюємо БД
-            serviceRequest.setStatus("Inspected");
-            serviceRequest.setTotalAmount(inspectionDto.getTotalAmount());
-            serviceRequest.setDepositAmount(inspectionDto.getDepositAmount());
-            serviceRequest.setInspectionPdfHash(inspectionHash);
-            serviceRequest.setBlockchainTxHash(txHash);
-
-            requestRepository.save(serviceRequest);
-
-            return ResponseEntity.ok("Результати огляду зафіксовані. Очікуйте підтвердження та оплати від клієнта.");
-        } catch (Exception e) {
-            log.error("Помилка при фіксації огляду: ", e);
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<String> setInspectionResult(@PathVariable Long requestId, @RequestBody InspectionRequest dto, Principal principal) throws Exception {
+        stoService.setInspectionResult(requestId, dto, principal.getName());
+        return ResponseEntity.ok("Inspection completed. Customer notified of costs.");
     }
 
     @PostMapping("/confirm-payment/{requestId}")
-    public ResponseEntity<?> confirmPayment(@PathVariable Long requestId, Principal principal) {
-        try {
-            ServiceRequest serviceRequest = requestRepository.findById(requestId).orElseThrow();
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-
-            if (!serviceRequest.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Немає доступу");
-            }
-
-            // 1. Генеруємо PDF-чек
-            String receiptHash = pdfService.generatePaymentReceiptPdf(
-                    serviceRequest.getId(),
-                    serviceRequest.getVehicle().getVin(),
-                    serviceRequest.getDepositAmount(),
-                    "Cash/Terminal at Station"
-            );
-
-            // 2. Фіксуємо в блокчейні
-            String txHash = blockchainService.confirmDepositPaid(
-                    serviceRequest.getBlockchainJobId(),
-                    receiptHash
-            );
-
-            // 3. Оновлюємо статус
-            serviceRequest.setStatus("ReadyForRepair");
-            serviceRequest.setPaymentReceiptPdfHash(receiptHash);
-            serviceRequest.setBlockchainTxHash(txHash);
-            requestRepository.save(serviceRequest);
-
-            return ResponseEntity.ok("Оплату підтверджено. Можна починати ремонт.");
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<PaymentResponse> confirmPayment(@PathVariable Long requestId, Principal principal) throws Exception {
+        PaymentResponse response = stoService.confirmPayment(requestId, principal.getName());
+        return ResponseEntity.ok(response);
     }
+
     @PostMapping("/start-repair/{requestId}")
-    @PreAuthorize("hasRole('STO')")
-    public ResponseEntity<?> startRepair(@PathVariable Long requestId, Principal principal) {
-        try {
-            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
-
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-            if (!request.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Немає доступу до цієї заявки");
-            }
-
-            String txHash = blockchainService.startRepair(request.getBlockchainJobId());
-
-            request.setStatus("WorkInProgress");
-            request.setBlockchainTxHash(txHash);
-            requestRepository.save(request);
-
-            log.info("Ремонт авто {} (VIN: {}) розпочато", request.getId(), request.getVehicle().getVin());
-            return ResponseEntity.ok("Статус змінено на 'В роботі'");
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Помилка: " + e.getMessage());
-        }
+    public ResponseEntity<String> startRepair(@PathVariable Long requestId, Principal principal) throws Exception {
+        stoService.startRepair(requestId, principal.getName());
+        return ResponseEntity.ok("Status updated to: Work In Progress.");
     }
+
     @PostMapping("/complete-repair/{requestId}")
-    @PreAuthorize("hasRole('STO')")
-    public ResponseEntity<?> completeRepair(
-            @PathVariable Long requestId,
-            @RequestBody WorkReportRequest reportDto,
-            Principal principal) {
-        try {
-            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
-
-            String reportHash = pdfService.generateWorkReportPdf(
-                    request.getVehicle().getVin(),
-                    reportDto.getItems(),
-                    reportDto.getFinalTotalAmount()
-            );
-
-            String txHash = blockchainService.completeRepair(
-                    request.getBlockchainJobId(),
-                    reportHash,
-                    reportDto.getFinalTotalAmount()
-            );
-
-            request.setStatus("ReadyForPickup");
-            request.setWorkReportPdfHash(reportHash);
-            request.setTotalAmount(reportDto.getFinalTotalAmount());
-            request.setBlockchainTxHash(txHash);
-
-            requestRepository.save(request);
-
-            return ResponseEntity.ok("Ремонт завершено. Клієнта повідомлено про фінальну вартість.");
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<String> completeRepair(@PathVariable Long requestId, @RequestBody WorkReportRequest dto, Principal principal) throws Exception {
+        stoService.completeRepair(requestId, dto, principal.getName());
+        return ResponseEntity.ok("Repair completed. Final report generated.");
     }
+
     @PostMapping("/finalize/{requestId}")
-    @PreAuthorize("hasRole('STO')")
-    public ResponseEntity<?> finalizeJob(@PathVariable Long requestId, Principal principal) {
-        try {
-            ServiceRequest request = requestRepository.findById(requestId).orElseThrow();
-
-            // Перевірка прав СТО
-            User currentUser = userRepository.findByEmail(principal.getName()).get();
-            if (!request.getStoProfile().getId().equals(currentUser.getStoProfile().getId())) {
-                return ResponseEntity.status(403).body("Немає доступу");
-            }
-
-            // 1. Генеруємо фінальний PDF-чек
-            String finalReceiptHash = pdfService.generateFinalReceiptPdf(
-                    request.getId(),
-                    request.getVehicle().getVin(),
-                    request.getTotalAmount(),
-                    request.getDepositAmount()
-            );
-
-            // 2. Фіксуємо фіналізацію в блокчейні
-            String txHash = blockchainService.finalizeJob(
-                    request.getBlockchainJobId(),
-                    finalReceiptHash
-            );
-
-            // 3. Оновлюємо статус у БД
-            request.setStatus("Finalized");
-            request.setPaymentReceiptPdfHash(finalReceiptHash); // Перезаписуємо або додаємо нове поле
-            request.setBlockchainTxHash(txHash);
-
-            requestRepository.save(request);
-
-            log.info("Заявка {} успішно завершена. Клієнт забрав авто.", requestId);
-            return ResponseEntity.ok("Заявку закрито. Дякуємо за роботу!");
-        } catch (Exception e) {
-            log.error("Помилка фіналізації: ", e);
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
+    public ResponseEntity<String> finalizeJob(@PathVariable Long requestId, Principal principal) throws Exception {
+        stoService.finalizeJob(requestId, principal.getName());
+        return ResponseEntity.ok("Job finalized. Vehicle released to customer.");
     }
 }

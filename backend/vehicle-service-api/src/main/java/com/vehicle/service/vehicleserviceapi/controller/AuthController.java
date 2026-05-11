@@ -7,39 +7,40 @@ import com.vehicle.service.vehicleserviceapi.dto.UserResponse;
 import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
 import com.vehicle.service.vehicleserviceapi.model.User;
 import com.vehicle.service.vehicleserviceapi.service.AuthService;
-import com.vehicle.service.vehicleserviceapi.service.JwtCore;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST controller for public authentication and registration endpoints.
+ */
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
-    // Нам знадобиться AuthenticationManager для логіну, налаштуємо його в SecurityConfig
-    private final AuthenticationManager authenticationManager;
-    private final JwtCore jwtCore;
     private final DtoMapper dtoMapper;
 
+    /**
+     * Endpoint for user registration.
+     */
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(@RequestBody RegisterRequest request) {
+        log.debug("REST request to register user: {}", request.getEmail());
         User user = authService.registerUser(request);
         return ResponseEntity.ok(dtoMapper.toUserResponse(user));
     }
 
+    /**
+     * Endpoint for user login. Returns a JWT if successful.
+     */
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        // Тут Spring сам перевірить пароль і роль, незалежно від того, як юзер потрапив у БД
-        Authentication auth = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        String token = jwtCore.generateToken(auth);
-        return ResponseEntity.ok(new JwtResponse(token));
+    public ResponseEntity<JwtResponse> login(@RequestBody LoginRequest request) {
+        log.debug("REST request to login: {}", request.getEmail());
+        JwtResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
     }
 }

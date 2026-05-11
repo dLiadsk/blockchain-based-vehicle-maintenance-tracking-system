@@ -1,8 +1,14 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.Data;
+import lombok.*;
 
+/**
+ * Detailed user information returned after successful authentication or registration.
+ */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class UserResponse {
     private Long id;
     private String email;

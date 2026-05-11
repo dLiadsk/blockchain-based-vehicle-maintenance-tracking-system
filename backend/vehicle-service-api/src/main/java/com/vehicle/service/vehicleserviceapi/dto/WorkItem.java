@@ -1,11 +1,17 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.Data;
+import lombok.*;
 
+/**
+ * Represents a single line item in a work report (e.g., a specific part or labor hour).
+ */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class WorkItem {
-    private String description; // Назва деталі або послуги
-    private Integer quantity;   // Кількість
-    private Long unitPrice;     // Ціна за одиницю
-    private Long totalPrice;    // Загальна сума за позицію
+    private String description;
+    private Integer quantity;
+    private Long unitPrice;
+    private Long totalPrice;
 }
