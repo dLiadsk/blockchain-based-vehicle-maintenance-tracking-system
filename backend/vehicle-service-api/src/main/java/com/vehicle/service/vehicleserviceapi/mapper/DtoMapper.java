@@ -37,7 +37,7 @@ public class DtoMapper {
                 .address(profile.getAddress())
                 .city(profile.getCity())
                 .region(profile.getRegion())
-                .description(profile.getDescription()) 
+                .description(profile.getDescription())
                 .serviceTypes(profile.getServiceTypes())
                 .build();
     }
