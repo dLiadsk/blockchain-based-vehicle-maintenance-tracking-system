@@ -1,6 +1,9 @@
 package com.vehicle.service.vehicleserviceapi.controller;
 
+import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestResponse;
 import com.vehicle.service.vehicleserviceapi.dto.VehicleRequest;
+import com.vehicle.service.vehicleserviceapi.mapper.DtoMapper;
+import com.vehicle.service.vehicleserviceapi.model.ServiceRequest;
 import com.vehicle.service.vehicleserviceapi.model.Vehicle;
 import com.vehicle.service.vehicleserviceapi.service.VehicleService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for vehicle management.
@@ -23,6 +27,7 @@ import java.util.List;
 public class VehicleController {
 
     private final VehicleService vehicleService;
+    private final DtoMapper dtoMapper;
 
     /**
      * Registers a vehicle to the currently authenticated user.
@@ -50,5 +55,26 @@ public class VehicleController {
         log.debug("REST request to fetch my vehicles: {}", principal.getName());
         List<Vehicle> vehicles = vehicleService.getVehiclesByOwner(principal.getName());
         return ResponseEntity.ok(vehicles);
+    }
+    /**
+     * Retrieves general vehicle information.
+     */
+    @GetMapping("/{vin}")
+    @PreAuthorize("hasAnyRole('USER', 'STO', 'ADMIN')")
+    public ResponseEntity<Vehicle> getVehicleDetails(@PathVariable String vin) {
+        return ResponseEntity.ok(vehicleService.getVehicleByVin(vin));
+    }
+
+    /**
+     * Retrieves the full maintenance and repair history for a specific vehicle.
+     * Essential for verifying service records via blockchain-backed audit trail.
+     */
+    @GetMapping("/{vin}/history")
+    @PreAuthorize("hasAnyRole('USER', 'STO', 'ADMIN')")
+    public ResponseEntity<List<ServiceRequestResponse>> getVehicleHistory(@PathVariable String vin) {
+        List<ServiceRequest> history = vehicleService.getVehicleServiceHistory(vin);
+        return ResponseEntity.ok(history.stream()
+                .map(dtoMapper::toServiceRequestResponse)
+                .collect(Collectors.toList()));
     }
 }

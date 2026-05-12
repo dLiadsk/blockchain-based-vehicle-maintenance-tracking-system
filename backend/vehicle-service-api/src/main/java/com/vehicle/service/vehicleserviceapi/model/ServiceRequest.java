@@ -45,6 +45,20 @@ public class ServiceRequest {
     @OneToMany(mappedBy = "serviceRequest", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("changedAt ASC")
     private List<StatusHistory> statusHistory;
+    /**
+     * Mileage at the time of the request and a list of required services.
+     */
+    @Column(name = "mileage")
+    private Long mileage;
+
+    /**
+     * List of work types requested for this specific service.
+     * Example: ["Oil Change", "Brake Inspection", "AC Recharge"].
+     */
+    @ElementCollection
+    @CollectionTable(name = "service_request_work_types", joinColumns = @JoinColumn(name = "service_request_id"))
+    @Column(name = "work_type")
+    private List<String> workTypes;
 
     // --- Service Details ---
 

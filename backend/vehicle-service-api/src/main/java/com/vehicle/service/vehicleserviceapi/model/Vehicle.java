@@ -52,6 +52,12 @@ public class Vehicle {
      */
     private Short year;
 
+    /** Current mileage of the vehicle in kilometers */
+    private Long mileage;
+
+    /** Type of vehicle (e.g., Sedan, SUV, Truck, Motorcycle) */
+    private String vehicleType;
+
     /**
      * Owner of the vehicle, mapped to the User entity.
      */

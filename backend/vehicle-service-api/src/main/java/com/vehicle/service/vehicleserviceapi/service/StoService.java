@@ -28,6 +28,7 @@ public class StoService {
     private final BlockchainService blockchainService;
     private final PdfService pdfService;
     private final DtoMapper dtoMapper;
+    private final VehicleRepository vehicleRepository;
 
     /**
      * Retrieves all requests assigned to the administrator's station.
@@ -74,17 +75,34 @@ public class StoService {
     }
 
     /**
-     * Performs technical inspection and generates the cost estimate PDF.
+     * Performs a technical inspection, updates the current vehicle mileage,
+     * and generates a cost estimate PDF.
+     * * @param requestId The ID of the service request.
+     * @param dto Data transfer object containing inspection findings and updated mileage.
+     * @param email Email of the authenticated STO administrator.
+     * @throws Exception if blockchain interaction or PDF generation fails.
      */
     @Transactional
     public void setInspectionResult(Long requestId, InspectionRequest dto, String email) throws Exception {
         ServiceRequest request = validateAndGetRequest(requestId, email);
 
+        if (dto.getCurrentMileage() != null) {
+            request.setMileage(dto.getCurrentMileage());
+            Vehicle vehicle = request.getVehicle();
+            vehicle.setMileage(dto.getCurrentMileage());
+            vehicleRepository.save(vehicle);
+        }
+
+        if (dto.getWorkTypes() != null) {
+            request.setWorkTypes(dto.getWorkTypes());
+        }
+
         String pdfHash = pdfService.generateInspectionPdf(
                 request.getVehicle().getVin(),
                 dto.getFindings(),
                 dto.getTotalAmount(),
-                dto.getDepositAmount()
+                dto.getDepositAmount(),
+                request.getWorkTypes()
         );
 
         String txHash = blockchainService.setInspectionResult(

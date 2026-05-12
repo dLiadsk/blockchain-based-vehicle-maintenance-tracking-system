@@ -1,8 +1,10 @@
 package com.vehicle.service.vehicleserviceapi.service;
 
 import com.vehicle.service.vehicleserviceapi.dto.VehicleRequest;
+import com.vehicle.service.vehicleserviceapi.model.ServiceRequest;
 import com.vehicle.service.vehicleserviceapi.model.User;
 import com.vehicle.service.vehicleserviceapi.model.Vehicle;
+import com.vehicle.service.vehicleserviceapi.repository.ServiceRequestRepository;
 import com.vehicle.service.vehicleserviceapi.repository.UserRepository;
 import com.vehicle.service.vehicleserviceapi.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class VehicleService {
     private final BlockchainService blockchainService;
     private final VehicleRepository vehicleRepository;
     private final UserRepository userRepository;
+    private final ServiceRequestRepository requestRepository;
 
     /**
      * Registers a new vehicle both in the local database and on the blockchain.
@@ -46,6 +49,8 @@ public class VehicleService {
                 .model(request.getModel())
                 .year(request.getYear())
                 .owner(currentUser)
+                .mileage(request.getMileage())
+                .vehicleType(request.getVehicleType())
                 .blockchainTxHash(txHash)
                 .build();
 
@@ -60,5 +65,29 @@ public class VehicleService {
         User user = userRepository.findByEmail(ownerEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return vehicleRepository.findAllByOwnerId(user.getId());
+    }
+
+    /**
+     * Retrieves full vehicle specifications and technical data by VIN.
+     *
+     * @param vin The unique vehicle identification number.
+     * @return Vehicle entity containing current specifications and owner information.
+     */
+    @Transactional(readOnly = true)
+    public Vehicle getVehicleByVin(String vin) {
+        return vehicleRepository.findByVin(vin)
+                .orElseThrow(() -> new RuntimeException("Vehicle not found with VIN: " + vin));
+    }
+
+    /**
+     * Retrieves the complete lifecycle history of a vehicle across all service stations.
+     *
+     * @param vin The unique vehicle identification number.
+     * @return List of all service requests associated with this vehicle.
+     */
+    @Transactional(readOnly = true)
+    public List<ServiceRequest> getVehicleServiceHistory(String vin) {
+        Vehicle vehicle = getVehicleByVin(vin);
+        return requestRepository.findAllByVehicleOrderByCreatedAtDesc(vehicle);
     }
 }

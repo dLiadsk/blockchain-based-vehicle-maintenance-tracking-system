@@ -1,6 +1,7 @@
 package com.vehicle.service.vehicleserviceapi.repository;
 
 import com.vehicle.service.vehicleserviceapi.model.ServiceRequest;
+import com.vehicle.service.vehicleserviceapi.model.Vehicle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -28,4 +29,12 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
      * @return A list of service requests.
      */
     List<ServiceRequest> findAllByStoProfileId(Long stoProfileId);
+    /**
+     * Retrieves all service requests associated with a specific vehicle,
+     * ordered by their creation date in descending order.
+     *
+     * @param vehicle The vehicle entity to filter by.
+     * @return A list of service requests forming the vehicle's maintenance history.
+     */
+    List<ServiceRequest> findAllByVehicleOrderByCreatedAtDesc(Vehicle vehicle);
 }

@@ -65,12 +65,32 @@ public class PdfService {
         });
     }
 
-    // --- 2. Inspection Report PDF ---
-    public String generateInspectionPdf(String vin, String findings, Long total, Long deposit) {
+    /**
+     * Generates a technical inspection report PDF including vehicle details,
+     * diagnostic findings, cost estimations, and planned maintenance activities.
+     *
+     * @param vin       The vehicle identification number.
+     * @param findings  Detailed technical diagnostic results.
+     * @param total     The estimated total cost of the service.
+     * @param deposit   The required prepayment amount.
+     * @param workTypes List of confirmed services to be performed.
+     * @return The SHA-256 hash of the generated PDF file.
+     */
+    public String generateInspectionPdf(String vin, String findings, Long total, Long deposit, List<String> workTypes) {
         return generatePdf("Inspection_Report", vin, (doc) -> {
             addTitle(doc, "TECHNICAL INSPECTION & COST ESTIMATION");
+
             addInfoRow(doc, "Vehicle VIN:", vin);
             addInfoRow(doc, "Technical Findings:", findings);
+
+            if (workTypes != null && !workTypes.isEmpty()) {
+                doc.add(new Paragraph("\nConfirmed Work Types:", FontFactory.getFont(FontFactory.HELVETICA_BOLD)));
+                com.itextpdf.text.List list = new com.itextpdf.text.List(com.itextpdf.text.List.UNORDERED);
+                workTypes.forEach(work -> list.add(new ListItem(work)));
+                doc.add(list);
+                doc.add(new Paragraph(" "));
+            }
+
             doc.add(new Chunk(new LineSeparator()));
             addInfoRow(doc, "Estimated Total Cost:", total + " UAH");
             addInfoRow(doc, "Required Deposit:", deposit + " UAH");
@@ -173,11 +193,12 @@ public class PdfService {
     }
 
     private String generatePdf(String prefix, String vin, PdfContent filler) {
+        String vehicleDirectory = STORAGE_PATH + vin + "/";
         String fileName = prefix.toLowerCase() + "_" + vin + "_" + System.currentTimeMillis() + ".pdf";
-        String fullPath = STORAGE_PATH + fileName;
+        String fullPath = vehicleDirectory + fileName;
 
         try {
-            Files.createDirectories(Paths.get(STORAGE_PATH));
+            Files.createDirectories(Paths.get(vehicleDirectory));
             Document document = new Document();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             PdfWriter.getInstance(document, out);
@@ -185,7 +206,6 @@ public class PdfService {
             document.open();
             filler.fill(document);
 
-            // Footer with Blockchain and Timestamp info
             document.add(new Paragraph(" "));
             document.add(new Chunk(new LineSeparator()));
             Paragraph footer = new Paragraph("This document is protected by a SHA-256 cryptographic hash and recorded on the blockchain ledger for integrity assurance.", smallItalic);

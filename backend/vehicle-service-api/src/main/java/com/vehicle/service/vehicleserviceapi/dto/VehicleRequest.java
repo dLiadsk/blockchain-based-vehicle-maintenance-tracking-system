@@ -16,4 +16,6 @@ public class VehicleRequest {
     private String brand;
     private String model;
     private Short year;
+    private Long mileage;
+    private String vehicleType;
 }
