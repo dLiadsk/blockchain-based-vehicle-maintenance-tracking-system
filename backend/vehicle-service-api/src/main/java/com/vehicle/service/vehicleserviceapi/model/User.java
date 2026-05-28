@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
  * Stores personal information, credentials, and role-based access data.
  */
 @Entity
+
 @Table(name = "users")
 @Data
 @Builder

@@ -49,10 +49,13 @@ public class JwtCore {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + lifetime);
 
+        String role = userDetails.getAuthorities().iterator().next().getAuthority();
+
         log.debug("Generating token for user: {}", userDetails.getUsername());
 
         return Jwts.builder()
                 .subject(userDetails.getUsername())
+                .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(signingKey)

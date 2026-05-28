@@ -14,4 +14,7 @@ public class StoAdminRequest {
     private String password;
     /** The ID of the STO profile this admin will manage. */
     private Long stoId;
+    private String firstName;
+    private String lastName;
+    private String phoneNumber;
 }

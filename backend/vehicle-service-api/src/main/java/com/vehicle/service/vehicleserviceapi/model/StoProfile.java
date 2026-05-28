@@ -1,5 +1,6 @@
 package com.vehicle.service.vehicleserviceapi.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -39,6 +40,7 @@ public class StoProfile {
     private String city;
     private String address;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "stoProfile")
     private List<User> admins;
 }

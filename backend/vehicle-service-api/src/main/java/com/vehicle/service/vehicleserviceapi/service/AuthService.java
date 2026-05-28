@@ -128,6 +128,9 @@ public class AuthService {
         User admin = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .phoneNumber(request.getPhoneNumber())
                 .role(UserRole.ROLE_STO)
                 .stoProfile(profile)
                 .build();
