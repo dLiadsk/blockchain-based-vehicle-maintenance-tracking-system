@@ -9,7 +9,7 @@ export default function Layout() {
 
     const handleLogout = () => {
         logout();
-        navigate('/login');
+        navigate('/login', { replace: true });
     };
 
     return (
@@ -20,7 +20,27 @@ export default function Layout() {
                     <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
                         СТО Блокчейн
                     </Typography>
+                    {localStorage.getItem('userRole') === 'ROLE_USER' && (
+                        <>
+                            {location.pathname !== '/driver' && (
+                                <Button color="inherit" onClick={() => navigate('/driver')} sx={{ mr: 2 }}>
+                                    Мій Гараж
+                                </Button>
+                            )}
 
+                            {!location.pathname.startsWith('/sto-catalog') && (
+                                <Button color="inherit" onClick={() => navigate('/sto-catalog')} sx={{ mr: 2 }}>
+                                    Каталог СТО
+                                </Button>
+                            )}
+
+                            {!location.pathname.startsWith('/my-requests') && (
+                                <Button color="inherit" onClick={() => navigate('/my-requests')} sx={{ mr: 2 }}>
+                                    Мої заявки
+                                </Button>
+                            )}
+                        </>
+                    )}
                     {user && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                             <Typography variant="body2" sx={{ opacity: 0.8 }}>

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Box, Button, TextField, Typography, Container, Paper, Alert } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { jwtDecode } from 'jwt-decode';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -25,7 +25,7 @@ export default function Login() {
 
             // Декодуємо токен, щоб дізнатися роль
             const decoded = jwtDecode<{ role: string }>(token);
-
+            localStorage.setItem('userRole', decoded.role);
             // Розумний редирект
             if (decoded.role === 'ROLE_ADMIN') {
                 navigate('/admin');
@@ -78,6 +78,20 @@ export default function Login() {
                         >
                             Увійти
                         </Button>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 3 }}>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                Ще не маєте акаунту?
+                            </Typography>
+                            <Button
+                                component={RouterLink}
+                                to="/register"
+                                fullWidth
+                                variant="outlined"
+                                color="primary"
+                            >
+                                Створити акаунт
+                            </Button>
+                        </Box>
                     </Box>
                 </Paper>
             </Box>
