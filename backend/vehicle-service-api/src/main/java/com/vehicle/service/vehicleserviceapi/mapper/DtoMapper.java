@@ -67,15 +67,27 @@ public class DtoMapper {
                 .workReportPdfHash(request.getWorkReportPdfHash())
 
                 // Linked Entities
-                .vehicleVin(request.getVehicle() != null ? request.getVehicle().getVin() : null)
+                .vehicle(request.getVehicle() != null ? toVehicleResponse(request.getVehicle()) : null)
                 .customer(toUserResponse(request.getCustomer()))
-                .stoProfile(toStoResponse(request.getStoProfile()))
-
+                .sto(toStoResponse(request.getStoProfile()))
+                .workTypes(request.getWorkTypes())
                 // Status History (Audit Trail for Frontend Timeline)
                 .statusHistory(request.getStatusHistory() != null ?
                         request.getStatusHistory().stream()
                                 .map(this::toStatusHistoryResponse)
                                 .collect(Collectors.toList()) : Collections.emptyList())
+                .build();
+    }
+    public VehicleResponse toVehicleResponse(Vehicle vehicle){
+        if (vehicle == null) return null;
+        return VehicleResponse.builder()
+                .vin(vehicle.getVin())
+                .year(vehicle.getYear())
+                .vehicleType(vehicle.getVehicleType())
+                .brand(vehicle.getBrand())
+                .mileage(vehicle.getMileage())
+                .number(vehicle.getNumber())
+                .model(vehicle.getModel())
                 .build();
     }
 

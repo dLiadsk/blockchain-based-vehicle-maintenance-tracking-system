@@ -1,16 +1,15 @@
 package com.vehicle.service.vehicleserviceapi.dto;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-/**
- * DTO for vehicle registration requests.
- * Used when a driver adds a new vehicle to their account.
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VehicleRequest {
+public class VehicleResponse {
     /** 17-character Vehicle Identification Number. */
     private String vin;
     private String number;

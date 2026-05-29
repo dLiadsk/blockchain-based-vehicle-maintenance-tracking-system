@@ -1,11 +1,13 @@
 package com.vehicle.service.vehicleserviceapi.controller;
 
-import com.vehicle.service.vehicleserviceapi.dto.CreateServiceRequest;
-import com.vehicle.service.vehicleserviceapi.dto.PaymentResponse;
-import com.vehicle.service.vehicleserviceapi.dto.ServiceRequestResponse;
+import com.vehicle.service.vehicleserviceapi.dto.*;
+import com.vehicle.service.vehicleserviceapi.service.PdfService;
 import com.vehicle.service.vehicleserviceapi.service.ServiceRequestService;
+import org.springframework.core.io.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,7 @@ import java.util.List;
 public class ServiceRequestController {
 
     private final ServiceRequestService serviceRequestService;
+    private final PdfService pdfService;
 
     @PostMapping("/create")
     @PreAuthorize("hasRole('USER')")
@@ -72,6 +75,43 @@ public class ServiceRequestController {
         } catch (Exception e) {
             log.error("Error fetching request details: ", e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+    @GetMapping("/{id}/document/{docType}")
+    @PreAuthorize("hasAnyRole('USER', 'STO', 'ADMIN')")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable Long id, @PathVariable String docType, Principal principal) {
+        try {
+            Resource resource = pdfService.downloadDocument(id, docType, principal.getName());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_PDF)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + resource.getFilename() + "\"")
+                    .body(resource);
+        }
+        catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('USER', 'STO', 'ADMIN')")
+    public ResponseEntity<?> cancelRequest(@PathVariable Long id, @RequestBody CancelRequestDto cancelDto, Principal principal) {
+        try {
+            ServiceRequestResponse response = serviceRequestService.cancelRequest(id, principal.getName(), cancelDto.getReason());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Помилка при скасуванні заявки: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+    @GetMapping("/{id}/verify-integrity/{docType}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<IntegrityCheckResponse> verifyIntegrity(@PathVariable Long id, @PathVariable String docType) {
+        try {
+            return ResponseEntity.ok(serviceRequestService.verifyDocumentIntegrity(id, docType));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(IntegrityCheckResponse.builder()
+                    .isValid(false)
+                    .message(e.getMessage())
+                    .build());
         }
     }
 }

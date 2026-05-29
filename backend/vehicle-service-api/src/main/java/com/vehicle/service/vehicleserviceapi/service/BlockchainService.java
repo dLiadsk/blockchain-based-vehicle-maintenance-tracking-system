@@ -191,4 +191,18 @@ public class BlockchainService {
 
         return receipt.getTransactionHash();
     }
+    /**
+     * Cancels a service request in the blockchain ledger.
+     */
+    public String cancelRequest(Long jobId, String reason) throws Exception {
+        log.info("Blockchain: Cancelling job ID: {} with reason: '{}'", jobId, reason);
+
+        TransactionReceipt receipt = contract.cancelRequest(
+                BigInteger.valueOf(jobId),
+                reason
+        ).send();
+
+        log.info("Job cancellation transaction successful: {}", receipt.getTransactionHash());
+        return receipt.getTransactionHash();
+    }
 }

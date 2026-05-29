@@ -35,10 +35,11 @@ public class ServiceRequestResponse {
     private String paymentReceiptPdfHash;
     private String workReportPdfHash;
 
-    private String vehicleVin;
+    private VehicleResponse vehicle;
     private UserResponse customer;
-    private StoProfileResponse stoProfile;
+    private StoProfileResponse sto;
 
+    private List<String> workTypes;
     /** Chronological list of status changes (Audit Trail). */
     private List<StatusHistoryResponse> statusHistory;
 }

@@ -7,12 +7,22 @@ import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.draw.LineSeparator;
 import com.vehicle.service.vehicleserviceapi.dto.WorkItem;
+import com.vehicle.service.vehicleserviceapi.model.ServiceRequest;
+import com.vehicle.service.vehicleserviceapi.model.User;
+import com.vehicle.service.vehicleserviceapi.model.UserRole;
+import com.vehicle.service.vehicleserviceapi.repository.ServiceRequestRepository;
+import com.vehicle.service.vehicleserviceapi.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.core.io.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -26,7 +36,10 @@ import java.util.List;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class PdfService {
+    private final ServiceRequestRepository requestRepository;
+    private final UserRepository userRepository;
 
     private final String STORAGE_PATH = "storage/requests/";
     private final String FONT_PATH = "src/main/resources/fonts/times.ttf";
@@ -159,6 +172,45 @@ public class PdfService {
         });
     }
 
+    public Resource downloadDocument(Long id, String docType, String currentUserEmail) throws IOException {
+        ServiceRequest request = requestRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new RuntimeException("Користувача не знайдено"));
+
+        boolean isOwner = request.getCustomer().getId().equals(currentUser.getId());
+        boolean isAssignedSto = currentUser.getStoProfile() != null &&
+                request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
+        boolean isAdmin = currentUser.getRole().equals(UserRole.ROLE_ADMIN);
+
+        if (!isOwner && !isAssignedSto && !isAdmin) {
+            throw new RuntimeException("Відмовлено в доступі: це не ваш документ");
+        }
+
+        String expectedHash = switch (docType.toLowerCase()) {
+            case "service_request" -> request.getPdfHash();
+            case "inspection_report" -> request.getInspectionPdfHash();
+            case "deposit_receipt" -> request.getPaymentReceiptPdfHash();
+            case "work_report" -> request.getWorkReportPdfHash();
+            default -> throw new RuntimeException("Невідомий тип документа");
+        };
+
+        if (expectedHash == null || expectedHash.isEmpty()) {
+            throw new RuntimeException("Документ ще не згенеровано");
+        }
+
+        String vin = request.getVehicle().getVin();
+        String exactFileName = docType.toLowerCase() + "_" + expectedHash + ".pdf";
+        Path filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+
+        if (!Files.exists(filePath)) {
+            throw new RuntimeException("Файл фізично не знайдено на диску");
+        }
+
+        return new UrlResource(filePath.toUri());
+
+    }
     // --- Core PDF Generation Logic ---
 
     private void addTitle(Document doc, String text) throws DocumentException {
@@ -194,8 +246,6 @@ public class PdfService {
 
     private String generatePdf(String prefix, String vin, PdfContent filler) {
         String vehicleDirectory = STORAGE_PATH + vin + "/";
-        String fileName = prefix.toLowerCase() + "_" + vin + "_" + System.currentTimeMillis() + ".pdf";
-        String fullPath = vehicleDirectory + fileName;
 
         try {
             Files.createDirectories(Paths.get(vehicleDirectory));
@@ -208,16 +258,22 @@ public class PdfService {
 
             document.add(new Paragraph(" "));
             document.add(new Chunk(new LineSeparator()));
-            Paragraph footer = new Paragraph("This document is protected by a SHA-256 cryptographic hash and recorded on the blockchain ledger for integrity assurance.", smallItalic);
+            Paragraph footer = new Paragraph("This document is protected by a SHA-256 cryptographic hash...", smallItalic);
             footer.add(new Paragraph("Generation Date: " + LocalDateTime.now().format(formatter), smallItalic));
             document.add(footer);
 
             document.close();
 
             byte[] pdfBytes = out.toByteArray();
+
+            String hash = calculateHash(pdfBytes);
+
+            String fileName = prefix.toLowerCase() + "_" + hash + ".pdf";
+            String fullPath = vehicleDirectory + fileName;
+
             Files.write(Paths.get(fullPath), pdfBytes);
 
-            return calculateHash(pdfBytes);
+            return hash;
         } catch (Exception e) {
             log.error("PDF generation failed: {}", e.getMessage());
             throw new RuntimeException("Error generating document: " + prefix);
@@ -228,7 +284,10 @@ public class PdfService {
         byte[] hash = MessageDigest.getInstance("SHA-256").digest(data);
         return HexFormat.of().formatHex(hash);
     }
-
+    public String calculateFileHash(Path filePath) throws Exception {
+        byte[] data = Files.readAllBytes(filePath);
+        return calculateHash(data);
+    }
     @FunctionalInterface
     private interface PdfContent {
         void fill(Document doc) throws Exception;

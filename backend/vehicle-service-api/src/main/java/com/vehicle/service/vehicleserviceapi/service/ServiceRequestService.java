@@ -9,6 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -73,6 +76,7 @@ public class ServiceRequestService {
                 .blockchainJobId(result.jobId())
                 .blockchainTxHash(result.txHash())
                 .pdfHash(pdfHash)
+                .workTypes(dto.getWorkTypes())
                 .build();
 
         ServiceRequest savedRequest = requestRepository.save(request);
@@ -163,5 +167,86 @@ public class ServiceRequestService {
         }
 
         return dtoMapper.toServiceRequestResponse(request);
+    }
+    /**
+     * Cancels a service request if it hasn't been processed or paid for yet.
+     * Synchronizes the cancellation with the blockchain.
+     */
+    @Transactional
+    public ServiceRequestResponse cancelRequest(Long requestId, String customerEmail, String reason) throws Exception {
+        log.info("User {} is attempting to cancel request ID {} with reason: {}", customerEmail, requestId, reason);
+
+        ServiceRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+
+        User currentUser = userRepository.findByEmail(customerEmail)
+                .orElseThrow(() -> new RuntimeException("Користувача не знайдено"));
+
+        boolean isOwner = request.getCustomer().getId().equals(currentUser.getId());
+        boolean isAssignedSto = currentUser.getStoProfile() != null &&
+                request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
+        boolean isAdmin = currentUser.getRole().name().equals("ROLE_ADMIN");
+
+        if (!isOwner && !isAssignedSto && !isAdmin) {
+            throw new RuntimeException("Відмовлено в доступі: ви не можете скасувати цю заявку");
+        }
+
+        if (!request.getStatus().equalsIgnoreCase("RequestCreated") &&
+                !request.getStatus().equalsIgnoreCase("PENDING")) {
+            throw new RuntimeException("Цю заявку вже неможливо скасувати на поточному етапі");
+        }
+
+        String finalReason = (reason == null || reason.trim().isEmpty()) ? "Скасовано без вказання причини" : reason;
+        String txHash = blockchainService.cancelRequest(request.getBlockchainJobId(), finalReason);
+
+        request.setStatus("CANCELLED");
+        request.setBlockchainTxHash(txHash);
+        ServiceRequest savedRequest = requestRepository.save(request);
+
+        recordStatusChange(savedRequest, "CANCELLED", txHash);
+
+        return dtoMapper.toServiceRequestResponse(savedRequest);
+    }
+    @Transactional(readOnly = true)
+    public IntegrityCheckResponse verifyDocumentIntegrity(Long requestId, String docType) throws Exception {
+        ServiceRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+
+        String originalHash = switch (docType.toLowerCase()) {
+            case "service_request" -> request.getPdfHash();
+            case "inspection_report" -> request.getInspectionPdfHash();
+            case "deposit_receipt" -> request.getPaymentReceiptPdfHash();
+            case "work_report" -> request.getWorkReportPdfHash();
+            default -> throw new RuntimeException("Невідомий тип документа");
+        };
+
+        if (originalHash == null || originalHash.isEmpty()) {
+            return IntegrityCheckResponse.builder()
+                    .valid(false)
+                    .message("Документ ще не згенеровано або не збережено в блокчейн.")
+                    .build();
+        }
+
+        String vin = request.getVehicle().getVin();
+        String exactFileName = docType.toLowerCase() + "_" + originalHash + ".pdf";
+        Path filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+
+        if (!Files.exists(filePath)) {
+            return IntegrityCheckResponse.builder()
+                    .valid(false)
+                    .message("Файл втрачено або видалено з сервера!")
+                    .build();
+        }
+
+        String currentHash = pdfService.calculateFileHash(filePath);
+
+        boolean isValid = currentHash.equals(originalHash);
+
+        return IntegrityCheckResponse.builder()
+                .valid(isValid)
+                .currentFileHash(currentHash)
+                .originalBlockchainHash(originalHash)
+                .message(isValid ? "Цілісність підтверджено: файл не змінювався." : "УВАГА: Хеш не співпадає! Файл був підроблений.")
+                .build();
     }
 }

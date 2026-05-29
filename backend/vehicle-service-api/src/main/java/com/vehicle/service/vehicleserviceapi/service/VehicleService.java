@@ -45,6 +45,7 @@ public class VehicleService {
         // 2. Save to local database
         Vehicle vehicle = Vehicle.builder()
                 .vin(request.getVin())
+                .number(request.getNumber())
                 .brand(request.getBrand())
                 .model(request.getModel())
                 .year(request.getYear())

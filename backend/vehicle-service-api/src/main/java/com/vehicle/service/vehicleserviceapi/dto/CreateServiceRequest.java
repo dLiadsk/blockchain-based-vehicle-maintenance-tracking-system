@@ -2,6 +2,8 @@ package com.vehicle.service.vehicleserviceapi.dto;
 
 import lombok.*;
 
+import java.util.List;
+
 /**
  * DTO used by customers to initiate a new service request for a vehicle.
  */
@@ -16,4 +18,5 @@ public class CreateServiceRequest {
     private Long stoId;
     /** Detailed description of the mechanical issue or required maintenance. */
     private String description;
+    private List<String> workTypes;
 }
