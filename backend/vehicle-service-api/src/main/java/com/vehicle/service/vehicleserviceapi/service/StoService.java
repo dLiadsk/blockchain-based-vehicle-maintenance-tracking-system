@@ -156,10 +156,10 @@ public class StoService {
      * Officially starts the repair process.
      */
     @Transactional
-    public void startRepair(Long requestId, String email) throws Exception {
+    public void startRepair(Long requestId, StartRepairRequest dto, String email) throws Exception {
         ServiceRequest request = validateAndGetRequest(requestId, email);
         String txHash = blockchainService.startRepair(request.getBlockchainJobId());
-
+        request.setArrivalInstructions(dto.getMessage());
         request.setStatus("WorkInProgress");
         request.setBlockchainTxHash(txHash);
 
@@ -177,7 +177,8 @@ public class StoService {
         String reportHash = pdfService.generateWorkReportPdf(
                 request.getVehicle().getVin(),
                 dto.getItems(),
-                dto.getFinalTotalAmount()
+                dto.getFinalTotalAmount(),
+                dto.getMechanicName()
         );
 
         String txHash = blockchainService.completeRepair(
@@ -185,7 +186,9 @@ public class StoService {
                 reportHash,
                 dto.getFinalTotalAmount()
         );
+        request.setArrivalInstructions(dto.getMessage());
 
+        request.setMechanic(dto.getMechanicName());
         request.setStatus("ReadyForPickup");
         request.setWorkReportPdfHash(reportHash);
         request.setTotalAmount(dto.getFinalTotalAmount());
@@ -213,7 +216,7 @@ public class StoService {
 
         request.setStatus("Finalized");
         request.setBlockchainTxHash(txHash);
-        request.setPaymentReceiptPdfHash(finalReceiptHash);
+        request.setFinalReceiptPdfHash(finalReceiptHash);
 
         requestRepository.save(request);
         recordHistory(request, "Finalized", txHash);

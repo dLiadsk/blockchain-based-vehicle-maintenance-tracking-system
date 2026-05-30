@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login.tsx';
 import Layout from "./components/Layout.tsx";
@@ -11,9 +11,8 @@ import StoCatalog from './pages/StoCatalog';
 import StoDetails from './pages/StoDetails';
 import MyRequests from './pages/MyRequests';
 import RequestDetails from './pages/RequestDetails';
-
-// Тимчасові заглушки для інших сторінок
-const StoDashboard = () => <Typography variant="h4" sx={{ p: 3 }}>Дашборд СТО (Заявки на ремонт)</Typography>;
+import StoDashboard from './pages/StoDashboard';
+import StoRequestDetails from './pages/StoRequestDetails';
 
 function App() {
     return (
@@ -39,6 +38,7 @@ function App() {
                         {/* Тільки для СТО */}
                         <Route element={<ProtectedRoute allowedRoles={['ROLE_STO']} />}>
                             <Route path="/sto/*" element={<StoDashboard />} />
+                            <Route path="/sto/requests/:id" element={<StoRequestDetails />} />
                         </Route>
 
                         {/* Тільки для Адмінів */}

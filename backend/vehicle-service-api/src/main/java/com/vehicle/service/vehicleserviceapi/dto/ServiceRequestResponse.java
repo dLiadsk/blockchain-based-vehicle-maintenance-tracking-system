@@ -34,6 +34,7 @@ public class ServiceRequestResponse {
     private String inspectionPdfHash;
     private String paymentReceiptPdfHash;
     private String workReportPdfHash;
+    private String finalReceiptPdfHash;
 
     private VehicleResponse vehicle;
     private UserResponse customer;

@@ -99,7 +99,7 @@ public class PdfService {
             if (workTypes != null && !workTypes.isEmpty()) {
                 doc.add(new Paragraph("\nConfirmed Work Types:", FontFactory.getFont(FontFactory.HELVETICA_BOLD)));
                 com.itextpdf.text.List list = new com.itextpdf.text.List(com.itextpdf.text.List.UNORDERED);
-                workTypes.forEach(work -> list.add(new ListItem(work)));
+                workTypes.forEach(work -> list.add(new ListItem(work, normalFont)));
                 doc.add(list);
                 doc.add(new Paragraph(" "));
             }
@@ -135,10 +135,11 @@ public class PdfService {
     }
 
     // --- 5. Work Report (Final Act) ---
-    public String generateWorkReportPdf(String vin, List<WorkItem> items, Long finalTotal) {
+    public String generateWorkReportPdf(String vin, List<WorkItem> items, Long finalTotal, String mechanic) {
         return generatePdf("Work_Report", vin, (doc) -> {
             addTitle(doc, "ACT OF COMPLETED WORKS AND PARTS");
             addInfoRow(doc, "Vehicle VIN:", vin);
+            addInfoRow(doc, "Responsible Mechanic:", mechanic != null && !mechanic.isEmpty() ? mechanic : "Not specified");
             doc.add(new Paragraph(" "));
 
             PdfPTable table = new PdfPTable(4);
@@ -192,7 +193,9 @@ public class PdfService {
             case "service_request" -> request.getPdfHash();
             case "inspection_report" -> request.getInspectionPdfHash();
             case "deposit_receipt" -> request.getPaymentReceiptPdfHash();
+            case "online_receipt" -> request.getPaymentReceiptPdfHash();
             case "work_report" -> request.getWorkReportPdfHash();
+            case "final_settlement" -> request.getFinalReceiptPdfHash();
             default -> throw new RuntimeException("Невідомий тип документа");
         };
 

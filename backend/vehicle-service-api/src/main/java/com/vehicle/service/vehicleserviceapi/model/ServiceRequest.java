@@ -63,6 +63,7 @@ public class ServiceRequest {
     // --- Service Details ---
 
     private String description;
+    private String mechanic;
 
     /**
      * Current lifecycle status. This is the "Source of Truth" for the present moment.
@@ -88,6 +89,7 @@ public class ServiceRequest {
     private String inspectionPdfHash;
     private String paymentReceiptPdfHash;
     private String workReportPdfHash;
+    private String finalReceiptPdfHash;
 
     @PrePersist
     protected void onCreate() {

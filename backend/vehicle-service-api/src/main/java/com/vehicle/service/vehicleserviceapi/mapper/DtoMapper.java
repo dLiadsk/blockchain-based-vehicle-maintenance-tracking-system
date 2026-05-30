@@ -65,6 +65,7 @@ public class DtoMapper {
                 .inspectionPdfHash(request.getInspectionPdfHash())
                 .paymentReceiptPdfHash(request.getPaymentReceiptPdfHash())
                 .workReportPdfHash(request.getWorkReportPdfHash())
+                .finalReceiptPdfHash(request.getFinalReceiptPdfHash())
 
                 // Linked Entities
                 .vehicle(request.getVehicle() != null ? toVehicleResponse(request.getVehicle()) : null)

@@ -12,6 +12,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WorkReportRequest {
+    private String message;
+    private String mechanicName;
     private List<WorkItem> items;
     private Long finalTotalAmount;
 }

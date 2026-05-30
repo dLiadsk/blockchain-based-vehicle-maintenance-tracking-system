@@ -54,8 +54,8 @@ public class StoController {
     }
 
     @PostMapping("/start-repair/{requestId}")
-    public ResponseEntity<String> startRepair(@PathVariable Long requestId, Principal principal) throws Exception {
-        stoService.startRepair(requestId, principal.getName());
+    public ResponseEntity<String> startRepair(@PathVariable Long requestId,@RequestBody StartRepairRequest dto, Principal principal) throws Exception {
+        stoService.startRepair(requestId, dto, principal.getName());
         return ResponseEntity.ok("Status updated to: Work In Progress.");
     }
 
