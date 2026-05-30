@@ -71,6 +71,7 @@ public class DtoMapper {
                 .customer(toUserResponse(request.getCustomer()))
                 .sto(toStoResponse(request.getStoProfile()))
                 .workTypes(request.getWorkTypes())
+                .mileage(request.getMileage())
                 // Status History (Audit Trail for Frontend Timeline)
                 .statusHistory(request.getStatusHistory() != null ?
                         request.getStatusHistory().stream()

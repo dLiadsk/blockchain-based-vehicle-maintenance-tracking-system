@@ -38,6 +38,7 @@ public class ServiceRequestResponse {
     private VehicleResponse vehicle;
     private UserResponse customer;
     private StoProfileResponse sto;
+    private Long mileage;
 
     private List<String> workTypes;
     /** Chronological list of status changes (Audit Trail). */

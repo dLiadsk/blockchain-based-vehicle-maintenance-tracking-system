@@ -19,4 +19,5 @@ public class CreateServiceRequest {
     /** Detailed description of the mechanical issue or required maintenance. */
     private String description;
     private List<String> workTypes;
+    private Long mileage;
 }

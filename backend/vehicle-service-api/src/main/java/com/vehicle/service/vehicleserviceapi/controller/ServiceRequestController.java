@@ -109,7 +109,7 @@ public class ServiceRequestController {
             return ResponseEntity.ok(serviceRequestService.verifyDocumentIntegrity(id, docType));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(IntegrityCheckResponse.builder()
-                    .isValid(false)
+                    .valid(false)
                     .message(e.getMessage())
                     .build());
         }

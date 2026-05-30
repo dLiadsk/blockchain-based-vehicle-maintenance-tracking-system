@@ -77,6 +77,7 @@ public class ServiceRequestService {
                 .blockchainTxHash(result.txHash())
                 .pdfHash(pdfHash)
                 .workTypes(dto.getWorkTypes())
+                .mileage(dto.getMileage())
                 .build();
 
         ServiceRequest savedRequest = requestRepository.save(request);
