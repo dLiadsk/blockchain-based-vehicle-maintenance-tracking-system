@@ -7,13 +7,16 @@ import {
 } from '@mui/material';
 
 import VisibilityIcon from '@mui/icons-material/Visibility';
-// Іконки для меню
+
 import AddBusinessIcon from '@mui/icons-material/AddBusiness';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import StoreIcon from '@mui/icons-material/Store';
 import PeopleIcon from '@mui/icons-material/People';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import SecurityIcon from '@mui/icons-material/Security';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import GppBadIcon from '@mui/icons-material/GppBad';
 
 import api from '../services/api';
 
@@ -384,9 +387,52 @@ const RequestList = () => {
     const [requests, setRequests] = useState<any[]>([]);
     const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
 
+    // --- НОВІ СТАНИ ДЛЯ ПЕРЕВІРКИ ЦІЛІСНОСТІ ---
+    const [integrityResult, setIntegrityResult] = useState<any>(null);
+    const [openIntegrityModal, setOpenIntegrityModal] = useState(false);
+    const [verifyingDoc, setVerifyingDoc] = useState('');
+
     useEffect(() => {
         api.get('/admin/requests').then(res => setRequests(res.data)).catch(console.error);
     }, []);
+
+    // --- ФУНКЦІЯ ПЕРЕВІРКИ ---
+    const handleVerifyIntegrity = async (docType: string, requestId: number) => {
+        setVerifyingDoc(docType);
+        try {
+            // Звертаємося до того ж ендпоінту, який ми створили раніше
+            const response = await api.get(`/service-requests/${requestId}/verify-integrity/${docType}`);
+            setIntegrityResult(response.data);
+            setOpenIntegrityModal(true);
+        } catch (error: any) {
+            setIntegrityResult(error.response?.data || { valid: false, message: 'Помилка з\'єднання з сервером' });
+            setOpenIntegrityModal(true);
+        } finally {
+            setVerifyingDoc('');
+        }
+    };
+
+    // Хелпер для рендеру блоку з хешем та кнопкою
+    const renderHashWithCheck = (label: string, hash: string | undefined | null, docType: string, reqId: number) => (
+        <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>{label}:</Typography>
+            <Typography variant="body2" sx={{ wordBreak: 'break-all', fontFamily: 'monospace', mb: 1, color: hash ? 'text.primary' : 'text.secondary' }}>
+                {hash || 'Документ ще не згенеровано'}
+            </Typography>
+            {hash && (
+                <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<SecurityIcon />}
+                    onClick={() => handleVerifyIntegrity(docType, reqId)}
+                    disabled={verifyingDoc === docType}
+                >
+                    {verifyingDoc === docType ? 'Перевірка...' : 'Перевірити цілісність'}
+                </Button>
+            )}
+        </Box>
+    );
 
     return (
         <>
@@ -404,7 +450,7 @@ const RequestList = () => {
                         {requests.map((r) => (
                             <TableRow key={r.id} hover>
                                 <TableCell>{r.blockchainJobId || 'Очікує'}</TableCell>
-                                <TableCell>{r.vehicleVin}</TableCell>
+                                <TableCell>{r.vehicle?.vin || 'Не вказано'}</TableCell>
                                 <TableCell>
                                     <Chip label={r.status} color="primary" variant="outlined" size="small" />
                                 </TableCell>
@@ -419,10 +465,11 @@ const RequestList = () => {
                 </Table>
             </TableContainer>
 
+            {/* ОСНОВНА МОДАЛКА З ДЕТАЛЯМИ ЗАЯВКИ */}
             <Dialog open={!!selectedRequest} onClose={() => setSelectedRequest(null)} maxWidth="md" fullWidth>
                 <DialogTitle sx={{ fontWeight: 'bold' }}>Деталі сервісної заявки #{selectedRequest?.id}</DialogTitle>
                 <DialogContent dividers>
-                    <Grid container spacing={2}>
+                    <Grid container spacing={3}>
                         <Grid size={{ xs: 12, sm: 6 }}>
                             <Typography><strong>Blockchain Job ID:</strong> {selectedRequest?.blockchainJobId}</Typography>
                             <Typography><strong>Поточний статус:</strong> {selectedRequest?.status}</Typography>
@@ -430,7 +477,7 @@ const RequestList = () => {
                             <Typography><strong>Опис проблеми:</strong> {selectedRequest?.description}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12, sm: 6 }}>
-                            <Typography><strong>VIN авто:</strong> {selectedRequest?.vehicleVin}</Typography>
+                            <Typography><strong>VIN авто:</strong> {selectedRequest?.vehicle?.vin}</Typography>
                             <Typography><strong>STO ID:</strong> {selectedRequest?.stoId}</Typography>
                             <Typography><strong>Загальна вартість:</strong> {selectedRequest?.totalAmount || 0} UAH</Typography>
                             <Typography><strong>Депозит:</strong> {selectedRequest?.depositAmount || 0} UAH</Typography>
@@ -441,24 +488,72 @@ const RequestList = () => {
                             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Список робіт:</Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
                                 {selectedRequest?.workTypes?.length > 0
-                                    ? selectedRequest.workTypes.map((work: string, i: number) => <Chip key={i} label={work} size="small" />)
+                                    ? selectedRequest.workTypes.map((work: string, i: number) => <Chip key={i} label={work} size="small" color="info" variant="outlined" />)
                                     : <Typography variant="body2" color="text.secondary">Роботи ще не призначені</Typography>
                                 }
                             </Box>
                         </Grid>
 
+                        {/* БЛОК З ХЕШАМИ ТА КНОПКАМИ ПЕРЕВІРКИ */}
                         <Grid size={{ xs: 12 }}>
-                            <Divider sx={{ my: 1 }} />
-                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Хеші документів (SHA-256):</Typography>
-                            <Typography variant="body2" sx={{ wordBreak: 'break-all' }}><strong>Заявка:</strong> {selectedRequest?.pdfHash || '—'}</Typography>
-                            <Typography variant="body2" sx={{ wordBreak: 'break-all' }}><strong>Інспекція:</strong> {selectedRequest?.inspectionPdfHash || '—'}</Typography>
-                            <Typography variant="body2" sx={{ wordBreak: 'break-all' }}><strong>Звіт робіт:</strong> {selectedRequest?.workReportPdfHash || '—'}</Typography>
-                            <Typography variant="body2" sx={{ wordBreak: 'break-all' }}><strong>Чек:</strong> {selectedRequest?.paymentReceiptPdfHash || '—'}</Typography>
+                            <Divider sx={{ my: 1, mb: 2 }} />
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Аудит цілісності документів (Blockchain):</Typography>
+
+                            <Grid container spacing={2}>
+                                <Grid size={{ xs: 12, sm: 6 }}>
+                                    {renderHashWithCheck('Офіційна заявка', selectedRequest?.pdfHash, 'service_request', selectedRequest?.id)}
+                                    {renderHashWithCheck('Акт виконаних робіт', selectedRequest?.workReportPdfHash, 'work_report', selectedRequest?.id)}
+                                </Grid>
+                                <Grid size={{ xs: 12, sm: 6 }}>
+                                    {renderHashWithCheck('Акт технічного огляду', selectedRequest?.inspectionPdfHash, 'inspection_report', selectedRequest?.id)}
+                                    {renderHashWithCheck('Фіскальний чек', selectedRequest?.paymentReceiptPdfHash, 'deposit_receipt', selectedRequest?.id)}
+                                </Grid>
+                            </Grid>
                         </Grid>
                     </Grid>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setSelectedRequest(null)} variant="contained">Закрити</Button>
+                    <Button onClick={() => setSelectedRequest(null)} variant="contained" size="large">Закрити</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* МОДАЛКА РЕЗУЛЬТАТУ ПЕРЕВІРКИ ЦІЛІСНОСТІ */}
+            <Dialog open={openIntegrityModal} onClose={() => setOpenIntegrityModal(false)} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{
+                    fontWeight: 'bold',
+                    bgcolor: integrityResult?.valid ? 'success.main' : 'error.main',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                }}>
+                    {integrityResult?.valid ? <VerifiedUserIcon /> : <GppBadIcon />}
+                    Результат перевірки Blockchain
+                </DialogTitle>
+                <DialogContent dividers sx={{ p: 3 }}>
+                    <Typography variant="h6" sx={{ mb: 2, color: integrityResult?.valid ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
+                        {integrityResult?.message}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary">Оригінальний хеш (з Блокчейну):</Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', mb: 2, bgcolor: 'grey.100', p: 1, borderRadius: 1 }}>
+                        {integrityResult?.originalBlockchainHash || 'Не знайдено'}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary">Поточний хеш (зчитано з файлу):</Typography>
+                    <Typography variant="body2" sx={{
+                        fontFamily: 'monospace',
+                        wordBreak: 'break-all',
+                        bgcolor: integrityResult?.valid ? 'success.50' : 'error.50',
+                        color: integrityResult?.valid ? 'success.dark' : 'error.dark',
+                        p: 1,
+                        borderRadius: 1
+                    }}>
+                        {integrityResult?.currentFileHash || 'Помилка читання'}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenIntegrityModal(false)} size="large">Закрити</Button>
                 </DialogActions>
             </Dialog>
         </>

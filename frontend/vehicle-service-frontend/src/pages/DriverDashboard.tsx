@@ -45,7 +45,8 @@ export default function DriverDashboard() {
     const [requestForm, setRequestForm] = useState({
         stoId: null as number | null,
         description: '',
-        selectedWorkTypes: [] as string[] // Додаємо масив для вибраних робіт
+        selectedWorkTypes: [] as string[],
+        currentMileage: ''
     });
     const [searchQuery, setSearchQuery] = useState('');
     const filteredVehicles = vehicles.filter(vehicle =>
@@ -107,7 +108,8 @@ export default function DriverDashboard() {
                 vin: selectedVehicle.vin,
                 stoId: requestForm.stoId,
                 description: requestForm.description,
-                workTypes: requestForm.selectedWorkTypes // Передаємо вибрані роботи
+                workTypes: requestForm.selectedWorkTypes,
+                mileage: parseInt(requestForm.currentMileage, 10)
             };
 
             await api.post('/service-requests/create', payload);
@@ -115,7 +117,7 @@ export default function DriverDashboard() {
             setOpenRequestModal(false);
 
             // ОЧИЩАЄМО ВСІ ФІЛЬТРИ ПІСЛЯ УСПІХУ
-            setRequestForm({stoId: null, description: '', selectedWorkTypes: []});
+            setRequestForm({ stoId: null, description: '', selectedWorkTypes: [], currentMileage: '' });
             setSelectedCity(null);
             setSelectedVehicle(null);
         } catch (error) {
@@ -357,7 +359,16 @@ export default function DriverDashboard() {
                                     noOptionsText="СТО не знайдено"
                                 />
                             </Grid>
-
+                            <Grid size={{xs: 12}}>
+                                <TextField
+                                    required
+                                    fullWidth
+                                    type="number"
+                                    label="Поточний пробіг авто (км)"
+                                    value={requestForm.currentMileage}
+                                    onChange={(e) => setRequestForm({ ...requestForm, currentMileage: e.target.value })}
+                                />
+                            </Grid>
                             <Grid size={{xs: 12}}>
                                 <TextField
                                     required

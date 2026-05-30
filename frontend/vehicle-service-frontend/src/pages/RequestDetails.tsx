@@ -33,7 +33,7 @@ export default function RequestDetails() {
     const [integrityResult, setIntegrityResult] = useState<any>(null);
     const [openIntegrityModal, setOpenIntegrityModal] = useState(false);
     const [verifyingDoc, setVerifyingDoc] = useState('');
-    
+
     useEffect(() => {
         api.get(`/service-requests/${id}`)
             .then(res => setReq(res.data))
@@ -181,8 +181,12 @@ export default function RequestDetails() {
                         {/* Дані про СТО та Авто */}
                         <Grid size={{ xs: 12, md: 6 }}>
                             <Typography variant="subtitle2" color="text.secondary" gutterBottom>Автомобіль</Typography>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
                                 {req.vehicle?.brand} {req.vehicle?.model}
+                            </Typography>
+
+                            <Typography variant="body2" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <strong>Зафіксований пробіг:</strong> {req.mileage ? `${req.mileage} км` : 'Не вказано'}
                             </Typography>
 
                             <Typography variant="subtitle2" color="text.secondary" gutterBottom>Обране СТО</Typography>
