@@ -35,9 +35,11 @@ public class ServiceRequestResponse {
     private String paymentReceiptPdfHash;
     private String workReportPdfHash;
     private String finalReceiptPdfHash;
+    private String mechanic;
 
     private VehicleResponse vehicle;
     private UserResponse customer;
+    private UserResponse manager;
     private StoProfileResponse sto;
     private Long mileage;
 

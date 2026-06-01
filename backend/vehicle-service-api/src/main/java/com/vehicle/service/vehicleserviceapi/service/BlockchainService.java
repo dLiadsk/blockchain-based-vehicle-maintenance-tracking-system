@@ -1,7 +1,9 @@
 package com.vehicle.service.vehicleserviceapi.service;
 
 import com.vehicle.service.vehicleserviceapi.contracts.VehicleService;
+import com.vehicle.service.vehicleserviceapi.dto.BlockchainJobDto;
 import com.vehicle.service.vehicleserviceapi.dto.BlockchainResult;
+import com.vehicle.service.vehicleserviceapi.dto.JobHistoryEventDto;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,10 +11,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.DefaultBlockParameterNumber;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.abi.FunctionEncoder;
+import org.web3j.abi.FunctionReturnDecoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.*;
+import org.web3j.abi.datatypes.generated.*;
+import org.web3j.protocol.core.methods.request.Transaction;
+import org.web3j.protocol.core.methods.response.EthCall;
+import java.util.Arrays;
+import java.util.List;
+
 
 import java.math.BigInteger;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Service responsible for interacting with the Ethereum smart contract.
@@ -204,5 +221,126 @@ public class BlockchainService {
 
         log.info("Job cancellation transaction successful: {}", receipt.getTransactionHash());
         return receipt.getTransactionHash();
+    }
+
+    /**
+     * Reads the current state of a repair job directly from the blockchain.
+     * Useful for auditing and verifying PostgreSQL database integrity.
+     */
+    public BlockchainJobDto getJobFromBlockchain(Long jobId) throws Exception {
+        log.info("Blockchain: Manually querying job data for ID: {}", jobId);
+
+        // 1. ВИПРАВЛЕННЯ: Викликаємо автоматичний геттер мапінгу "repairJobs" замість "getJob"
+        // Він повертає рівний, плоский список змінних без обгортки у Tuple
+        Function function = new Function(
+                "repairJobs",
+                Arrays.asList(new Uint256(jobId)),
+                Arrays.asList(
+                        new TypeReference<Uint256>() {},    // 0: id
+                        new TypeReference<Utf8String>() {}, // 1: vin
+                        new TypeReference<Address>() {},    // 2: client
+                        new TypeReference<Uint8>() {},      // 3: status
+                        new TypeReference<Uint256>() {},    // 4: estimatedTotal
+                        new TypeReference<Uint256>() {},    // 5: depositRequired
+                        new TypeReference<Utf8String>() {}, // 6: cancelReason
+                        new TypeReference<Utf8String>() {}, // 7: requestPdfHash
+                        new TypeReference<Utf8String>() {}, // 8: inspectionPdfHash
+                        new TypeReference<Utf8String>() {}, // 9: workReportPdfHash
+                        new TypeReference<Utf8String>() {}  // 10: receiptPdfHash
+                )
+        );
+
+        String encodedFunction = FunctionEncoder.encode(function);
+
+        EthCall response = web3j.ethCall(
+                Transaction.createEthCallTransaction(null, contractAddress, encodedFunction),
+                org.web3j.protocol.core.DefaultBlockParameterName.LATEST
+        ).send();
+
+        // 2. Додаємо перевірку: якщо блокчейн нічого не повернув
+        if (response.hasError() || response.getValue() == null || response.getValue().equals("0x")) {
+            throw new RuntimeException("Блокчейн повернув порожню відповідь або сталася помилка виклику для Job ID: " + jobId);
+        }
+
+        // 3. Декодуємо плоский результат
+        List<Type> results = FunctionReturnDecoder.decode(response.getValue(), function.getOutputParameters());
+
+        if (results.isEmpty() || results.size() < 11) {
+            throw new RuntimeException("Не вдалося розпарсити дані з блокчейну (недостатньо полів) для Job ID: " + jobId);
+        }
+
+        // 4. Мапимо розпаковані дані в наш DTO
+        return BlockchainJobDto.builder()
+                .id(((Uint256) results.get(0)).getValue().longValue())
+                .vin(((Utf8String) results.get(1)).getValue())
+                .clientAddress(((Address) results.get(2)).getValue())
+                .statusIndex(((Uint8) results.get(3)).getValue().intValue())
+                .estimatedTotal(((Uint256) results.get(4)).getValue().longValue())
+                .depositRequired(((Uint256) results.get(5)).getValue().longValue())
+                .cancelReason(((Utf8String) results.get(6)).getValue())
+                .requestPdfHash(((Utf8String) results.get(7)).getValue())
+                .inspectionPdfHash(((Utf8String) results.get(8)).getValue())
+                .workReportPdfHash(((Utf8String) results.get(9)).getValue())
+                .receiptPdfHash(((Utf8String) results.get(10)).getValue())
+                .build();
+    }
+
+    /**
+     * Retrieves the entire chronological history of status changes for a specific job
+     * safely and synchronously, avoiding Web3j's infinite polling bugs.
+     */
+    public List<JobHistoryEventDto> getJobHistoryFromBlockchain(Long jobId) throws Exception {
+        log.info("Blockchain: Fetching event history for job ID: {}", jobId);
+
+        // 1. Створюємо фільтр для синхронного отримання ВСІХ минулих логів (без зависань)
+        org.web3j.protocol.core.methods.request.EthFilter filter = new org.web3j.protocol.core.methods.request.EthFilter(
+                DefaultBlockParameterName.EARLIEST,
+                DefaultBlockParameterName.LATEST,
+                contractAddress
+        );
+
+        // 2. Виконуємо один запит до ноди (працює миттєво)
+        List<org.web3j.protocol.core.methods.response.EthLog.LogResult> logs = web3j.ethGetLogs(filter).send().getLogs();
+
+        // 3. Збираємо унікальні хеші транзакцій, щоб не робити дубльованих запитів
+        java.util.Set<String> uniqueTxHashes = logs.stream()
+                .map(logResult -> ((org.web3j.protocol.core.methods.response.Log) logResult.get()).getTransactionHash())
+                .collect(Collectors.toSet());
+
+        List<JobHistoryEventDto> historyList = new java.util.ArrayList<>();
+
+        // 4. Для кожної транзакції отримуємо Receipt і парсимо події готовим автогенерованим методом
+        for (String txHash : uniqueTxHashes) {
+            var receiptOpt = web3j.ethGetTransactionReceipt(txHash).send().getTransactionReceipt();
+            if (receiptOpt.isPresent()) {
+                List<VehicleService.StatusChangedEventResponse> parsedEvents = contract.getStatusChangedEvents(receiptOpt.get());
+
+                for (var event : parsedEvents) {
+                    if (event.jobId.longValue() == jobId) {
+                        historyList.add(JobHistoryEventDto.builder()
+                                .jobId(event.jobId.longValue())
+                                .statusIndex(event.newStatus.intValue())
+                                .reason(event.reason)
+                                .transactionHash(event.log.getTransactionHash())
+                                .blockNumber(event.log.getBlockNumber().longValue())
+                                .build());
+                    }
+                }
+            }
+        }
+
+        // 5. Сортуємо події в правильному хронологічному порядку (за номером блоку)
+        historyList.sort(java.util.Comparator.comparing(JobHistoryEventDto::getBlockNumber));
+
+        log.info("Successfully found {} history events for Job ID {}", historyList.size(), jobId);
+        return historyList;
+    }
+    /**
+     * Retrieves the total number of repair jobs registered in the blockchain smart contract.
+     */
+    public Long getJobCounter() throws Exception {
+        log.info("Blockchain: Fetching current job counter");
+        BigInteger counter = contract.jobCounter().send();
+        return counter.longValue();
     }
 }

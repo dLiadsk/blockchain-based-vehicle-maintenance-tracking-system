@@ -92,7 +92,7 @@ public class ServiceRequestController {
         }
     }
     @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('USER', 'STO', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'STO')")
     public ResponseEntity<?> cancelRequest(@PathVariable Long id, @RequestBody CancelRequestDto cancelDto, Principal principal) {
         try {
             ServiceRequestResponse response = serviceRequestService.cancelRequest(id, principal.getName(), cancelDto.getReason());
@@ -103,7 +103,7 @@ public class ServiceRequestController {
         }
     }
     @GetMapping("/{id}/verify-integrity/{docType}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<IntegrityCheckResponse> verifyIntegrity(@PathVariable Long id, @PathVariable String docType) {
         try {
             return ResponseEntity.ok(serviceRequestService.verifyDocumentIntegrity(id, docType));

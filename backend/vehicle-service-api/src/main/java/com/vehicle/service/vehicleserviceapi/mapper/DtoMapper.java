@@ -51,6 +51,7 @@ public class DtoMapper {
                 .status(request.getStatus())
                 .createdAt(request.getCreatedAt())
                 .arrivalInstructions(request.getArrivalInstructions())
+                .mechanic(request.getMechanic())
 
                 // Blockchain Metadata
                 .blockchainJobId(request.getBlockchainJobId())
@@ -70,6 +71,7 @@ public class DtoMapper {
                 // Linked Entities
                 .vehicle(request.getVehicle() != null ? toVehicleResponse(request.getVehicle()) : null)
                 .customer(toUserResponse(request.getCustomer()))
+                .manager(toUserResponse(request.getManager()))
                 .sto(toStoResponse(request.getStoProfile()))
                 .workTypes(request.getWorkTypes())
                 .mileage(request.getMileage())

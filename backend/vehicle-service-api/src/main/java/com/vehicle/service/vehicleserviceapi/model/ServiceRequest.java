@@ -35,7 +35,11 @@ public class ServiceRequest {
     private User customer;
 
     @ManyToOne
-    @JoinColumn(name = "sto_profile_id", nullable = false)
+    @JoinColumn(name = "manager_id")
+    private User manager;
+
+    @ManyToOne
+    @JoinColumn(name = "sto_profile_id")
     private StoProfile stoProfile;
 
     /**

@@ -1,10 +1,11 @@
-import {useState, useEffect} from 'react';
-import {useNavigate} from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Chip, Alert, CircularProgress, Button, Tabs, Tab, TextField
 } from '@mui/material';
 import api from '../services/api';
+import BlockchainSyncButton from '../components/BlockchainSyncButton';
 
 export default function StoDashboard() {
     const [requests, setRequests] = useState<any[]>([]);
@@ -14,7 +15,9 @@ export default function StoDashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const navigate = useNavigate();
 
-    useEffect(() => {
+    // Виносимо логіку завантаження в окрему функцію, щоб її можна було передати у кнопку синхронізації
+    const fetchRequests = () => {
+        setLoading(true);
         api.get('/sto/requests')
             .then(res => setRequests(res.data))
             .catch(err => {
@@ -22,12 +25,15 @@ export default function StoDashboard() {
                 setError('Не вдалося завантажити заявки');
             })
             .finally(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        fetchRequests();
     }, []);
 
     const finishedStatuses = ['Completed', 'COMPLETED', 'ReadyForPickup', 'Finalized'];
     const canceledStatuses = ['Canceled', 'CANCELLED'];
 
-    // Єдина правильна функція фільтрації (статус + пошук)
     const getFilteredRequests = () => {
         return requests.filter(req => {
             const status = req.status;
@@ -72,18 +78,23 @@ export default function StoDashboard() {
         }
     };
 
-    if (loading) return <Box sx={{display: 'flex', justifyContent: 'center', mt: 10}}><CircularProgress/></Box>;
+    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>;
 
     const filteredRequests = getFilteredRequests();
     const activeCount = requests.filter(req => !finishedStatuses.includes(req.status) && !canceledStatuses.includes(req.status)).length;
 
     return (
-        <Box sx={{p: 3, maxWidth: 1200, mx: 'auto'}}>
-            <Typography variant="h4" sx={{fontWeight: 'bold', mb: 3}}>Робочий стіл СТО</Typography>
-            {error && <Alert severity="error" sx={{mb: 3}}>{error}</Alert>}
+        <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+            {/* Додано Flex-контейнер для розміщення заголовка та кнопки на одному рівні */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Робочий стіл СТО</Typography>
+                <BlockchainSyncButton onSuccess={fetchRequests} />
+            </Box>
 
-            <Paper sx={{mb: 1}} elevation={1}>
-                <Box sx={{p: 2}}>
+            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
+            <Paper sx={{ mb: 1 }} elevation={1}>
+                <Box sx={{ p: 2 }}>
                     <TextField
                         fullWidth
                         label="Пошук за ID, Прізвищем або VIN-кодом"
@@ -93,7 +104,7 @@ export default function StoDashboard() {
                     />
                 </Box>
             </Paper>
-            <Paper sx={{mb: 2}} elevation={1}>
+            <Paper sx={{ mb: 2 }} elevation={1}>
                 <Tabs
                     value={tabValue}
                     onChange={(_, newValue) => setTabValue(newValue)}
@@ -101,29 +112,28 @@ export default function StoDashboard() {
                     textColor="primary"
                     variant="fullWidth"
                 >
-                    <Tab label={`Активні (${activeCount})`}/>
-                    <Tab label="Завершені / Готові"/>
-                    <Tab label="Скасовані"/>
-                    <Tab label={`Усі заявки (${requests.length})`}/>
+                    <Tab label={`Активні (${activeCount})`} />
+                    <Tab label="Завершені / Готові" />
+                    <Tab label="Скасовані" />
+                    <Tab label={`Усі заявки (${requests.length})`} />
                 </Tabs>
-
             </Paper>
 
             <TableContainer component={Paper} elevation={3}>
                 <Table>
-                    <TableHead sx={{bgcolor: 'grey.200'}}>
+                    <TableHead sx={{ bgcolor: 'grey.200' }}>
                         <TableRow>
-                            <TableCell sx={{fontWeight: 'bold'}}>ID / Дата</TableCell>
-                            <TableCell sx={{fontWeight: 'bold'}}>Автомобіль</TableCell>
-                            <TableCell sx={{fontWeight: 'bold'}}>Проблема</TableCell>
-                            <TableCell sx={{fontWeight: 'bold'}}>Статус</TableCell>
-                            <TableCell align="right" sx={{fontWeight: 'bold'}}>Дія</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>ID / Дата</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Автомобіль</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Проблема</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Статус</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Дія</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {filteredRequests.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} align="center" sx={{py: 3, color: 'text.secondary'}}>
+                                <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
                                     Заявки у цій категорії відсутні
                                 </TableCell>
                             </TableRow>
@@ -133,21 +143,21 @@ export default function StoDashboard() {
                                     key={req.id}
                                     hover
                                     onClick={() => navigate(`/sto/requests/${req.id}`)}
-                                    sx={{cursor: 'pointer'}}
+                                    sx={{ cursor: 'pointer' }}
                                 >
                                     <TableCell>
-                                        <strong>#{req.id}</strong><br/>
-                                        <span style={{fontSize: '0.8rem', color: 'gray'}}>
+                                        <strong>#{req.id}</strong><br />
+                                        <span style={{ fontSize: '0.8rem', color: 'gray' }}>
                                             {req.createdAt ? new Date(req.createdAt).toLocaleDateString('uk-UA') : '---'}
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        {req.vehicle?.brand} {req.vehicle?.model}<br/>
-                                        <span style={{fontSize: '0.8rem', color: 'gray', fontFamily: 'monospace'}}>
+                                        {req.vehicle?.brand} {req.vehicle?.model}<br />
+                                        <span style={{ fontSize: '0.8rem', color: 'gray', fontFamily: 'monospace' }}>
                                             {req.vehicle?.vin}
                                         </span>
                                     </TableCell>
-                                    <TableCell sx={{maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                                    <TableCell sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                         {req.description}
                                     </TableCell>
                                     <TableCell>
@@ -156,7 +166,7 @@ export default function StoDashboard() {
                                             color={getStatusChipColor(req.status)}
                                             variant="outlined"
                                             size="small"
-                                            sx={{fontWeight: 'bold'}}
+                                            sx={{ fontWeight: 'bold' }}
                                         />
                                     </TableCell>
                                     <TableCell align="right">

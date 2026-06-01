@@ -18,13 +18,13 @@ export default function StoDetails() {
     const [notification, setNotification] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
     const [requestForm, setRequestForm] = useState({
         vin: '',
+        mileage: '', // НОВЕ ПОЛЕ: Пробіг
         description: '',
         selectedWorkTypes: [] as string[]
     });
 
     useEffect(() => {
-        // Оскільки в нас може не бути окремого ендпоінту GET /stos/{id},
-        // безпечніше завантажити всі і знайти потрібне (або заміни на api.get(`/stos/${id}`) якщо такий є)
+        // Завантажуємо дані СТО
         api.get('/stos').then(res => {
             const foundSto = res.data.find((s: any) => s.id === Number(id));
             setSto(foundSto);
@@ -46,6 +46,7 @@ export default function StoDetails() {
             const payload = {
                 vin: requestForm.vin,
                 stoId: sto.id,
+                mileage: Number(requestForm.mileage) || 0, // Передаємо пробіг як число
                 description: requestForm.description,
                 workTypes: requestForm.selectedWorkTypes
             };
@@ -53,7 +54,7 @@ export default function StoDetails() {
             await api.post('/service-requests/create', payload);
             setNotification({ text: 'Заявку успішно відправлено на СТО!', type: 'success' });
             setOpenModal(false);
-            setRequestForm({ vin: '', description: '', selectedWorkTypes: [] });
+            setRequestForm({ vin: '', mileage: '', description: '', selectedWorkTypes: [] });
         } catch (error) {
             console.error(error);
             setNotification({ text: 'Помилка при створенні заявки', type: 'error' });
@@ -71,7 +72,7 @@ export default function StoDetails() {
 
             <Card elevation={3} sx={{
                 width: '100%',
-                minHeight: '400px', /* Гарантуємо однакову мінімальну висоту */
+                minHeight: '400px',
                 display: 'flex',
                 flexDirection: 'column',
                 borderRadius: 2,
@@ -92,13 +93,11 @@ export default function StoDetails() {
                     </Button>
                 </Box>
 
-                {/* flexGrow: 1 дозволяє контенту зайняти весь вільний простір картки */}
                 <CardContent sx={{ p: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="body1" sx={{ mb: 4, color: 'text.primary', fontSize: '1.1rem' }}>
                         {sto.description || 'СТО ще не додало детальний опис.'}
                     </Typography>
 
-                    {/* mt: 'auto' відштовхує цей блок у самий низ картки */}
                     <Box sx={{ mt: 'auto' }}>
                         <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Доступні послуги:</Typography>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -127,6 +126,24 @@ export default function StoDetails() {
                                     onChange={(_, newValue) => setRequestForm({ ...requestForm, vin: newValue ? newValue.vin : '' })}
                                     renderInput={(params) => <TextField {...params} required label="Оберіть ваш автомобіль" />}
                                     noOptionsText="У вас ще немає авто. Додайте його в Гаражі."
+                                />
+                            </Grid>
+
+                            {/* НОВЕ ПОЛЕ: Ввід пробігу */}
+                            <Grid size={{ xs: 12 }}>
+                                <TextField
+                                    fullWidth
+                                    required
+                                    variant="outlined"
+                                    type="number"
+                                    label="Поточний пробіг авто (км)"
+                                    value={requestForm.mileage}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        // Блокуємо введення від'ємних чисел (якщо число < 0, ігноруємо зміну)
+                                        if (Number(val) < 0) return;
+                                        setRequestForm({ ...requestForm, mileage: val });
+                                    }}
                                 />
                             </Grid>
 

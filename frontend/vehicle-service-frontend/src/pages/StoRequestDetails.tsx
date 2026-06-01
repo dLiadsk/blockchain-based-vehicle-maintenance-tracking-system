@@ -13,6 +13,10 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import PolicyIcon from '@mui/icons-material/Policy';
+import SecurityIcon from '@mui/icons-material/Security';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import GppBadIcon from '@mui/icons-material/GppBad';
 import api from '../services/api';
 
 export default function StoRequestDetails() {
@@ -23,9 +27,15 @@ export default function StoRequestDetails() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Розширені стани для модалок дій (додано FINALIZE)
+    // Розширені стани для модалок дій
     const [activeModal, setActiveModal] = useState<'APPROVE' | 'INSPECT' | 'COMPLETE' | 'CANCEL' | 'CONFIRM_PAYMENT' | 'START_REPAIR' | 'FINALIZE' | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
+
+    // Стейт для аудиту та перевірок
+    const [integrityResult, setIntegrityResult] = useState<any>(null);
+    const [openIntegrityModal, setOpenIntegrityModal] = useState(false);
+    const [verifyingDoc, setVerifyingDoc] = useState('');
+    const [isGlobalAuditing, setIsGlobalAuditing] = useState(false);
 
     // Дані форм та повідомлень
     const [approveMsg, setApproveMsg] = useState('Чекаємо вас завтра о 10:00.');
@@ -85,29 +95,54 @@ export default function StoRequestDetails() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        void fetchRequestDetails();
+    }, [id]);
+
     const handleViewDocument = async (docType: string) => {
         try {
-            // Робимо запит через наш api (з токеном!), вказуємо responseType: 'blob'
             const response = await api.get(`/service-requests/${id}/document/${docType}`, {
                 responseType: 'blob'
             });
-
-            // Створюємо віртуальний файл (Blob) з отриманих даних
             const file = new Blob([response.data], { type: 'application/pdf' });
-
-            // Створюємо тимчасове посилання на цей файл у пам'яті браузера
             const fileURL = URL.createObjectURL(file);
-
-            // Відкриваємо це посилання в новій вкладці
             window.open(fileURL, '_blank');
         } catch (err) {
             console.error("Помилка завантаження документа", err);
             alert("Не вдалося завантажити документ. Можливо, у вас немає доступу.");
         }
     };
-    useEffect(() => {
-        void fetchRequestDetails();
-    }, [id]);
+
+    // БЛОКЧЕЙН ФУНКЦІЇ АУДИТУ
+    const handleVerifyIntegrity = async (docType: string) => {
+        setVerifyingDoc(docType);
+        try {
+            const response = await api.get(`/service-requests/${id}/verify-integrity/${docType}`);
+            setIntegrityResult(response.data);
+            setOpenIntegrityModal(true);
+        } catch (error: any) {
+            setIntegrityResult(error.response?.data || { valid: false, message: 'Помилка з\'єднання з сервером' });
+            setOpenIntegrityModal(true);
+        } finally {
+            setVerifyingDoc('');
+        }
+    };
+
+    const handleGlobalAudit = async () => {
+        setIsGlobalAuditing(true);
+        try {
+            const response = await api.get(`/audit/verify-job/${id}`);
+            setIntegrityResult(response.data);
+            setOpenIntegrityModal(true);
+        } catch (error: any) {
+            setIntegrityResult(error.response?.data || { valid: false, message: 'Помилка з\'єднання з сервером аудиту' });
+            setOpenIntegrityModal(true);
+        } finally {
+            setIsGlobalAuditing(false);
+        }
+    };
+
 
     const handleAction = async (endpoint: string, payload?: any, method: 'post' | 'put' = 'post') => {
         setActionLoading(true);
@@ -161,7 +196,6 @@ export default function StoRequestDetails() {
                 primaryButton = <Button variant="contained" color="info" size="large" startIcon={<CheckCircleIcon />} onClick={() => setActiveModal('COMPLETE')}>Завершити ремонт</Button>;
                 break;
             case 'ReadyForPickup':
-                // ТЕПЕР ВІДКРИВАЄТЬСЯ МОДАЛКА FINALIZE
                 primaryButton = <Button variant="contained" color="success" size="large" onClick={() => setActiveModal('FINALIZE')}>Віддати авто (Розрахунок завершено)</Button>;
                 break;
             default:
@@ -190,6 +224,19 @@ export default function StoRequestDetails() {
                 <Box sx={{ bgcolor: 'primary.main', color: 'white', p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold' }}>Управління заявкою #{req.id}</Typography>
                     <Chip label={req.status} sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 'bold' }} />
+                </Box>
+
+                {/* ПАНЕЛЬ ІНСТРУМЕНТІВ АУДИТУ */}
+                <Box sx={{ p: 2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, borderBottom: '1px solid #eee', bgcolor: 'grey.50' }}>
+                    <Button
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={isGlobalAuditing ? <CircularProgress size={20} /> : <PolicyIcon />}
+                        onClick={handleGlobalAudit}
+                        disabled={isGlobalAuditing || !req.blockchainJobId}
+                    >
+                        {isGlobalAuditing ? 'Аудит...' : 'Блокчейн-аудит заявки'}
+                    </Button>
                 </Box>
 
                 <CardContent sx={{ p: 4 }}>
@@ -223,7 +270,6 @@ export default function StoRequestDetails() {
                             </Typography>
                         </Grid>
 
-                        {/* НОВИЙ БЛОК: ОСТАННЄ ПОВІДОМЛЕННЯ ВІД СТО */}
                         {req.arrivalInstructions && (
                             <Grid size={{xs: 12}}>
                                 <Typography variant="subtitle2" color="primary.main" gutterBottom>Поточне повідомлення для клієнта (від СТО)</Typography>
@@ -257,69 +303,67 @@ export default function StoRequestDetails() {
                             </Paper>
                         </Grid>
 
-                        {/* ОНОВЛЕНИЙ БЛОК: ДОКУМЕНТИ PDF */}
-                        {(req.pdfHash || req.inspectionPdfHash || req.paymentReceiptPdfHash || req.workReportPdfHash || req.finalReceiptPdfHash) && (
-                            <Grid size={{xs: 12}}>
-                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>Згенеровані документи (PDF)</Typography>
-                                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                        {/* ОНОВЛЕНИЙ БЛОК: ДОКУМЕНТИ ТА АУДИТ */}
+                        <Grid size={{ xs: 12 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Документи та Аудит:</Typography>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
 
-                                    {req.pdfHash && (
-                                        <Chip
-                                            icon={<PictureAsPdfIcon />}
-                                            label="Заявка на ремонт"
-                                            onClick={() => handleViewDocument('service_request')}
-                                            color="default"
-                                            variant="outlined"
-                                            clickable
-                                        />
-                                    )}
+                                {req.pdfHash && (
+                                    <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Офіційна заявка на СТО</Typography>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', mb: 2, wordBreak: 'break-all' }}>SHA-256: {req.pdfHash}</Typography>
+                                        <Button variant="outlined" color="primary" startIcon={<PictureAsPdfIcon />} sx={{ mt: 'auto', mb: 1 }} onClick={() => handleViewDocument('service_request')}>Переглянути PDF</Button>
+                                        <Button variant="contained" color="secondary" startIcon={<SecurityIcon />} onClick={() => handleVerifyIntegrity('service_request')} disabled={verifyingDoc === 'service_request'}>
+                                            {verifyingDoc === 'service_request' ? 'Перевірка...' : 'Перевірити цілісність'}
+                                        </Button>
+                                    </Box>
+                                )}
 
-                                    {req.inspectionPdfHash && (
-                                        <Chip
-                                            icon={<PictureAsPdfIcon />}
-                                            label="Акт огляду"
-                                            onClick={() => handleViewDocument('inspection_report')}
-                                            color="primary"
-                                            variant="outlined"
-                                            clickable
-                                        />
-                                    )}
+                                {req.inspectionPdfHash && (
+                                    <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Акт технічного огляду</Typography>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', mb: 2, wordBreak: 'break-all' }}>SHA-256: {req.inspectionPdfHash}</Typography>
+                                        <Button variant="outlined" color="info" startIcon={<PictureAsPdfIcon />} sx={{ mt: 'auto', mb: 1 }} onClick={() => handleViewDocument('inspection_report')}>Переглянути PDF</Button>
+                                        <Button variant="contained" color="secondary" startIcon={<SecurityIcon />} onClick={() => handleVerifyIntegrity('inspection_report')} disabled={verifyingDoc === 'inspection_report'}>
+                                            {verifyingDoc === 'inspection_report' ? 'Перевірка...' : 'Перевірити цілісність'}
+                                        </Button>
+                                    </Box>
+                                )}
 
-                                    {req.paymentReceiptPdfHash && (
-                                        <Chip
-                                            icon={<PictureAsPdfIcon />}
-                                            label="Квитанція (Завдаток)"
-                                            onClick={() => handleViewDocument('deposit_receipt')}
-                                            color="warning"
-                                            variant="outlined"
-                                            clickable
-                                        />
-                                    )}
+                                {req.paymentReceiptPdfHash && (
+                                    <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Квитанція (Завдаток)</Typography>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', mb: 2, wordBreak: 'break-all' }}>SHA-256: {req.paymentReceiptPdfHash}</Typography>
+                                        <Button variant="outlined" color="warning" startIcon={<PictureAsPdfIcon />} sx={{ mt: 'auto', mb: 1 }} onClick={() => handleViewDocument('deposit_receipt')}>Переглянути PDF</Button>
+                                        <Button variant="contained" color="secondary" startIcon={<SecurityIcon />} onClick={() => handleVerifyIntegrity('deposit_receipt')} disabled={verifyingDoc === 'deposit_receipt'}>
+                                            {verifyingDoc === 'deposit_receipt' ? 'Перевірка...' : 'Перевірити цілісність'}
+                                        </Button>
+                                    </Box>
+                                )}
 
-                                    {req.workReportPdfHash && (
-                                        <Chip
-                                            icon={<PictureAsPdfIcon />}
-                                            label="Акт виконаних робіт"
-                                            onClick={() => handleViewDocument('work_report')}
-                                            color="info"
-                                            variant="outlined"
-                                            clickable
-                                        />
-                                    )}
+                                {req.workReportPdfHash && (
+                                    <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Акт виконаних робіт</Typography>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', mb: 2, wordBreak: 'break-all' }}>SHA-256: {req.workReportPdfHash}</Typography>
+                                        <Button variant="contained" color="info" startIcon={<PictureAsPdfIcon />} sx={{ mt: 'auto', mb: 1 }} onClick={() => handleViewDocument('work_report')}>Переглянути PDF</Button>
+                                        <Button variant="contained" color="secondary" startIcon={<SecurityIcon />} onClick={() => handleVerifyIntegrity('work_report')} disabled={verifyingDoc === 'work_report'}>
+                                            {verifyingDoc === 'work_report' ? 'Перевірка...' : 'Перевірити цілісність'}
+                                        </Button>
+                                    </Box>
+                                )}
 
-                                    {req.finalReceiptPdfHash && (
-                                        <Chip
-                                            icon={<PictureAsPdfIcon />}
-                                            label="Фінальний чек"
-                                            onClick={() => handleViewDocument('final_settlement')}
-                                            color="success"
-                                            variant="outlined"
-                                            clickable
-                                        />
-                                    )}
-                                </Box>
-                            </Grid>
-                        )}
+                                {req.finalReceiptPdfHash && (
+                                    <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Фінальний чек розрахунку</Typography>
+                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', mb: 2, wordBreak: 'break-all' }}>SHA-256: {req.finalReceiptPdfHash}</Typography>
+                                        <Button variant="contained" color="success" startIcon={<PictureAsPdfIcon />} sx={{ mt: 'auto', mb: 1 }} onClick={() => handleViewDocument('final_settlement')}>Переглянути PDF</Button>
+                                        <Button variant="contained" color="secondary" startIcon={<SecurityIcon />} onClick={() => handleVerifyIntegrity('final_settlement')} disabled={verifyingDoc === 'final_settlement'}>
+                                            {verifyingDoc === 'final_settlement' ? 'Перевірка...' : 'Перевірити цілісність'}
+                                        </Button>
+                                    </Box>
+                                )}
+                            </Box>
+                        </Grid>
 
                         {/* НОВИЙ БЛОК: ІСТОРІЯ ТА БЛОКЧЕЙН */}
                         {req.history && req.history.length > 0 && (
@@ -356,7 +400,30 @@ export default function StoRequestDetails() {
                 </CardContent>
             </Card>
 
-            {/* --- МОДАЛЬНІ ВІКНА ДІЙ --- */}
+            {/* --- МОДАЛКА АУДИТУ --- */}
+            <Dialog open={openIntegrityModal} onClose={() => setOpenIntegrityModal(false)} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ fontWeight: 'bold', bgcolor: integrityResult?.valid ? 'success.main' : 'error.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {integrityResult?.valid ? <VerifiedUserIcon /> : <GppBadIcon />} Результат перевірки Blockchain
+                </DialogTitle>
+                <DialogContent dividers sx={{ p: 3 }}>
+                    <Typography variant="h6" sx={{ mb: 2, color: integrityResult?.valid ? 'success.main' : 'error.main', fontWeight: 'bold' }}>{integrityResult?.message}</Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary">Дані Блокчейну (Source of Truth):</Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', mb: 2, bgcolor: 'grey.100', p: 1, borderRadius: 1 }}>
+                        {integrityResult?.originalBlockchainHash || 'Не знайдено'}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary">Локальні дані (БД / Файл):</Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all', bgcolor: integrityResult?.valid ? 'success.50' : 'error.50', color: integrityResult?.valid ? 'success.dark' : 'error.dark', p: 1, borderRadius: 1 }}>
+                        {integrityResult?.currentFileHash || 'Помилка читання'}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenIntegrityModal(false)} size="large">Закрити</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* --- ІНШІ МОДАЛЬНІ ВІКНА ДІЙ --- */}
 
             <Dialog open={activeModal === 'APPROVE'} onClose={() => setActiveModal(null)} fullWidth>
                 <DialogTitle>Підтвердити заявку</DialogTitle>
@@ -508,7 +575,6 @@ export default function StoRequestDetails() {
                 </DialogActions>
             </Dialog>
 
-            {/* НОВА МОДАЛКА: ПІДТВЕРДЖЕННЯ ФІНАЛІЗАЦІЇ */}
             <Dialog open={activeModal === 'FINALIZE'} onClose={() => setActiveModal(null)} fullWidth>
                 <DialogTitle color="success.main">Підтвердження завершення</DialogTitle>
                 <DialogContent dividers>

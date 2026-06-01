@@ -189,6 +189,8 @@ public class PdfService {
             throw new RuntimeException("Відмовлено в доступі: це не ваш документ");
         }
 
+        String filePrefix = docType.toLowerCase();
+
         String expectedHash = switch (docType.toLowerCase()) {
             case "service_request" -> request.getPdfHash();
             case "inspection_report" -> request.getInspectionPdfHash();
@@ -206,6 +208,12 @@ public class PdfService {
         String vin = request.getVehicle().getVin();
         String exactFileName = docType.toLowerCase() + "_" + expectedHash + ".pdf";
         Path filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+
+        if ((filePrefix.equals("deposit_receipt") || filePrefix.equals("online_receipt")) && !Files.exists(filePath)) {
+            String alternativePrefix = filePrefix.equals("deposit_receipt") ? "online_receipt" : "deposit_receipt";
+            exactFileName = alternativePrefix + "_" + expectedHash + ".pdf";
+            filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+        }
 
         if (!Files.exists(filePath)) {
             throw new RuntimeException("Файл фізично не знайдено на диску");

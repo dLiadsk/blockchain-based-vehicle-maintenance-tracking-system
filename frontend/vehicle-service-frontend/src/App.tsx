@@ -13,49 +13,59 @@ import MyRequests from './pages/MyRequests';
 import RequestDetails from './pages/RequestDetails';
 import StoDashboard from './pages/StoDashboard';
 import StoRequestDetails from './pages/StoRequestDetails';
+import Footer from './components/Footer';
 
 function App() {
     return (
         <BrowserRouter>
-            <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-                <Routes>
-                    {/* Публічні маршрути */}
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
+            {/* Головний контейнер на весь екран, використовує Flexbox */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
 
-                    {/* Захищені маршрути всередині єдиного Layout */}
-                    <Route element={<Layout />}>
+                {/* Блок з контентом. flexGrow: 1 змушує його зайняти весь вільний простір, відштовхуючи футер вниз */}
+                <Box sx={{ flexGrow: 1 }}>
+                    <Routes>
+                        {/* Публічні маршрути */}
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/register" element={<Register />} />
 
-                        {/* Тільки для Водіїв */}
-                        <Route element={<ProtectedRoute allowedRoles={['ROLE_USER']} />}>
-                            <Route path="/driver/*" element={<DriverDashboard />} />
-                            <Route path="/sto-catalog" element={<StoCatalog />} />
-                            <Route path="/sto-catalog/:id" element={<StoDetails />} />
-                            <Route path="/my-requests" element={<MyRequests />} />
-                            <Route path="/requests/:id" element={<RequestDetails />} />
+                        {/* Захищені маршрути всередині єдиного Layout */}
+                        <Route element={<Layout />}>
+
+                            {/* Тільки для Водіїв */}
+                            <Route element={<ProtectedRoute allowedRoles={['ROLE_USER']} />}>
+                                <Route path="/driver/*" element={<DriverDashboard />} />
+                                <Route path="/sto-catalog" element={<StoCatalog />} />
+                                <Route path="/sto-catalog/:id" element={<StoDetails />} />
+                                <Route path="/my-requests" element={<MyRequests />} />
+                                <Route path="/requests/:id" element={<RequestDetails />} />
+                            </Route>
+
+                            {/* Тільки для СТО */}
+                            <Route element={<ProtectedRoute allowedRoles={['ROLE_STO']} />}>
+                                <Route path="/sto/*" element={<StoDashboard />} />
+                                <Route path="/sto/requests/:id" element={<StoRequestDetails />} />
+                            </Route>
+
+                            {/* Тільки для Адмінів */}
+                            <Route element={<ProtectedRoute allowedRoles={['ROLE_ADMIN']} />}>
+                                <Route path="/admin/*" element={<AdminDashboard />} />
+                            </Route>
+
+                            {/* Спільний доступ (авто можуть бачити всі три ролі) */}
+                            <Route element={<ProtectedRoute allowedRoles={['ROLE_USER', 'ROLE_STO', 'ROLE_ADMIN']} />}>
+                                <Route path="/vehicle/:vin" element={<VehicleDetails />} />
+                            </Route>
+
                         </Route>
 
-                        {/* Тільки для СТО */}
-                        <Route element={<ProtectedRoute allowedRoles={['ROLE_STO']} />}>
-                            <Route path="/sto/*" element={<StoDashboard />} />
-                            <Route path="/sto/requests/:id" element={<StoRequestDetails />} />
-                        </Route>
+                        {/* Редирект за замовчуванням */}
+                        <Route path="*" element={<Navigate to="/login" replace />} />
+                    </Routes>
+                </Box>
 
-                        {/* Тільки для Адмінів */}
-                        <Route element={<ProtectedRoute allowedRoles={['ROLE_ADMIN']} />}>
-                            <Route path="/admin/*" element={<AdminDashboard />} />
-                        </Route>
+                {/* Футер, який завжди буде внизу */}
+                <Footer />
 
-                        {/* Спільний доступ (авто можуть бачити всі три ролі) */}
-                        <Route element={<ProtectedRoute allowedRoles={['ROLE_USER', 'ROLE_STO', 'ROLE_ADMIN']} />}>
-                            <Route path="/vehicle/:vin" element={<VehicleDetails />} />
-                        </Route>
-
-                    </Route>
-
-                    {/* Редирект за замовчуванням */}
-                    <Route path="*" element={<Navigate to="/login" replace />} />
-                </Routes>
             </Box>
         </BrowserRouter>
     );

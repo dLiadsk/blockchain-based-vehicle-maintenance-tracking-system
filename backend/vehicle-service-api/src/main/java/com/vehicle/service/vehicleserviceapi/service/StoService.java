@@ -47,7 +47,8 @@ public class StoService {
     @Transactional
     public void approveRequest(Long requestId, ApproveRequest dto, String email) throws Exception {
         ServiceRequest request = validateAndGetRequest(requestId, email);
-
+        User manager = userRepository.findByEmail(email).orElseThrow();
+        request.setManager(manager);
         String txHash = blockchainService.adminApprove(request.getBlockchainJobId());
 
         request.setStatus("AcceptedByAdmin");

@@ -124,6 +124,7 @@ public class ServiceRequestService {
                 .receiptPdfHash(receiptHash)
                 .build();
     }
+
     /**
      * Helper method to record status transitions in the history table.
      */
@@ -169,6 +170,7 @@ public class ServiceRequestService {
 
         return dtoMapper.toServiceRequestResponse(request);
     }
+
     /**
      * Cancels a service request if it hasn't been processed or paid for yet.
      * Synchronizes the cancellation with the blockchain.
@@ -188,18 +190,25 @@ public class ServiceRequestService {
                 request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
         boolean isAdmin = currentUser.getRole().name().equals("ROLE_ADMIN");
 
+        List<String> cancellableStatuses = List.of(
+                "RequestCreated",
+                "AcceptedByAdmin",
+                "VehicleArrived"
+        );
+
         if (!isOwner && !isAssignedSto && !isAdmin) {
             throw new RuntimeException("Відмовлено в доступі: ви не можете скасувати цю заявку");
         }
 
-        if (!request.getStatus().equalsIgnoreCase("RequestCreated") &&
-                !request.getStatus().equalsIgnoreCase("PENDING")) {
-            throw new RuntimeException("Цю заявку вже неможливо скасувати на поточному етапі");
+        if (!cancellableStatuses.contains(request.getStatus())) {
+            throw new RuntimeException("Цю заявку вже неможливо скасувати на поточному етапі (огляд вже проведено)");
         }
 
         String finalReason = (reason == null || reason.trim().isEmpty()) ? "Скасовано без вказання причини" : reason;
+
         String txHash = blockchainService.cancelRequest(request.getBlockchainJobId(), finalReason);
 
+        request.setArrivalInstructions(reason);
         request.setStatus("CANCELLED");
         request.setBlockchainTxHash(txHash);
         ServiceRequest savedRequest = requestRepository.save(request);
@@ -208,17 +217,20 @@ public class ServiceRequestService {
 
         return dtoMapper.toServiceRequestResponse(savedRequest);
     }
+
     @Transactional(readOnly = true)
     public IntegrityCheckResponse verifyDocumentIntegrity(Long requestId, String docType) throws Exception {
         ServiceRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
 
+        // 1. Додано підтримку final_settlement
         String originalHash = switch (docType.toLowerCase()) {
             case "service_request" -> request.getPdfHash();
             case "inspection_report" -> request.getInspectionPdfHash();
             case "deposit_receipt" -> request.getPaymentReceiptPdfHash();
             case "work_report" -> request.getWorkReportPdfHash();
-            default -> throw new RuntimeException("Невідомий тип документа");
+            case "final_settlement" -> request.getFinalReceiptPdfHash();
+            default -> throw new RuntimeException("Невідомий тип документа: " + docType);
         };
 
         if (originalHash == null || originalHash.isEmpty()) {
@@ -229,8 +241,15 @@ public class ServiceRequestService {
         }
 
         String vin = request.getVehicle().getVin();
-        String exactFileName = docType.toLowerCase() + "_" + originalHash + ".pdf";
+        String filePrefix = docType.toLowerCase();
+        String exactFileName = filePrefix + "_" + originalHash + ".pdf";
         Path filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+
+        // 2. Розумна перевірка для завдатку: якщо оплата була онлайн, файл має інший префікс
+        if (filePrefix.equals("deposit_receipt") && !Files.exists(filePath)) {
+            exactFileName = "online_receipt_" + originalHash + ".pdf";
+            filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
+        }
 
         if (!Files.exists(filePath)) {
             return IntegrityCheckResponse.builder()

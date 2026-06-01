@@ -37,4 +37,5 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
      * @return A list of service requests forming the vehicle's maintenance history.
      */
     List<ServiceRequest> findAllByVehicleOrderByCreatedAtDesc(Vehicle vehicle);
+    boolean existsByBlockchainJobId(Long id);
 }
