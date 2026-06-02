@@ -1,41 +1,79 @@
-import { useState } from 'react';
+import React, { useState, type JSX } from 'react';
 import { Box, Button, TextField, Typography, Container, Paper, Alert } from '@mui/material';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
+
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { jwtDecode } from 'jwt-decode';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
-export default function Login() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
+// ============================================================================
+// TYPES & CONSTANTS
+// ============================================================================
+
+interface LoginResponse {
+    token: string;
+}
+
+interface DecodedToken {
+    role: string;
+    sub?: string;
+    exp?: number;
+}
+
+/**
+ * Mapping of user roles to their respective dashboard routes.
+ * Keeps navigation centralized and easily extensible.
+ */
+const ROLE_DASHBOARD_ROUTES: Record<string, string> = {
+    'ROLE_ADMIN': '/admin',
+    'ROLE_STO': '/sto',
+    'ROLE_USER': '/driver',
+};
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
+/**
+ * User authentication component.
+ * Handles credentials submission, JWT token retrieval and decoding,
+ * and role-based redirection.
+ */
+export default function Login(): JSX.Element {
+    const [email, setEmail] = useState<string>('');
+    const [password, setPassword] = useState<string>('');
+    const [error, setError] = useState<string>('');
+
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.SyntheticEvent) => {
         e.preventDefault();
         setError('');
 
         try {
-            const response = await api.post('/auth/login', { email, password });
+            // Request authentication token from the backend
+            const response = await api.post<LoginResponse>('/auth/login', { email, password });
             const token = response.data.token;
 
-            // Зберігаємо токен
+            // Persist token in global auth state
             login(token);
 
-            // Декодуємо токен, щоб дізнатися роль
-            const decoded = jwtDecode<{ role: string }>(token);
-            localStorage.setItem('userRole', decoded.role);
-            // Розумний редирект
-            if (decoded.role === 'ROLE_ADMIN') {
-                navigate('/admin');
-            } else if (decoded.role === 'ROLE_STO') {
-                navigate('/sto');
-            } else {
-                navigate('/driver');
+            // Decode token to extract user role for redirection
+            const decoded = jwtDecode<DecodedToken>(token);
+
+            // Store role locally (serves as a sync for ProtectedRoute)
+            if (decoded.role) {
+                localStorage.setItem('userRole', decoded.role);
             }
+
+            // Smart redirect based on role mapping
+            // Using replace: true prevents the user from navigating back to the login page
+            const targetRoute = decoded.role ? ROLE_DASHBOARD_ROUTES[decoded.role] || '/driver' : '/driver';
+            navigate(targetRoute, { replace: true });
+
         } catch (err) {
-            console.error(err);
+            console.error('Login failed:', err);
             setError('Невірний email або пароль, або сервер недоступний.');
         }
     };
@@ -58,7 +96,7 @@ export default function Login() {
                             label="Email адреса"
                             type="email"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                         />
                         <TextField
                             margin="normal"
@@ -67,7 +105,7 @@ export default function Login() {
                             label="Пароль"
                             type="password"
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                         />
                         <Button
                             type="submit"

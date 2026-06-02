@@ -1,9 +1,24 @@
-import { useState } from 'react';
+import React, { useState, type JSX } from 'react';
 import { Box, Button, TextField, Typography, Container, Paper, Alert, Grid, Link } from '@mui/material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import api from '../services/api';
 
-export default function Register() {
+/**
+ * Expected structure of an error response from the API.
+ */
+interface ApiErrorResponse {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+}
+
+/**
+ * User registration component.
+ * Handles the creation of a new regular user account (ROLE_USER).
+ */
+export default function Register(): JSX.Element {
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -11,31 +26,31 @@ export default function Register() {
         phoneNumber: '',
         password: '',
     });
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState(false);
+
+    const [error, setError] = useState<string>('');
+    const [success, setSuccess] = useState<boolean>(false);
     const navigate = useNavigate();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.SyntheticEvent) => {
         e.preventDefault();
         setError('');
         setSuccess(false);
 
         try {
-            // Відправляємо запит на реєстрацію звичайного користувача (ROLE_USER)
             await api.post('/auth/register', formData);
-
             setSuccess(true);
-            // Через 2 секунди перенаправляємо на сторінку входу
+
             setTimeout(() => {
                 navigate('/login');
             }, 2000);
-        } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.message || 'Помилка реєстрації. Можливо, такий email вже існує.');
+        } catch (err) {
+            console.error('Registration failed:', err);
+            const apiError = err as ApiErrorResponse;
+            setError(apiError.response?.data?.message || 'Помилка реєстрації. Можливо, такий email вже існує.');
         }
     };
 
@@ -53,23 +68,68 @@ export default function Register() {
                     <Box component="form" onSubmit={handleSubmit}>
                         <Grid container spacing={2}>
                             <Grid size={{ xs: 12, sm: 6 }}>
-                                <TextField required fullWidth label="Ім'я" name="firstName" value={formData.firstName} onChange={handleChange} />
+                                <TextField
+                                    required
+                                    fullWidth
+                                    label="Ім'я"
+                                    name="firstName"
+                                    value={formData.firstName}
+                                    onChange={handleChange}
+                                />
                             </Grid>
                             <Grid size={{ xs: 12, sm: 6 }}>
-                                <TextField required fullWidth label="Прізвище" name="lastName" value={formData.lastName} onChange={handleChange} />
+                                <TextField
+                                    required
+                                    fullWidth
+                                    label="Прізвище"
+                                    name="lastName"
+                                    value={formData.lastName}
+                                    onChange={handleChange}
+                                />
                             </Grid>
                             <Grid size={{ xs: 12 }}>
-                                <TextField required fullWidth label="Email адреса" type="email" name="email" value={formData.email} onChange={handleChange} />
+                                <TextField
+                                    required
+                                    fullWidth
+                                    label="Email адреса"
+                                    type="email"
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                />
                             </Grid>
                             <Grid size={{ xs: 12 }}>
-                                <TextField required fullWidth label="Номер телефону" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="+380..." />
+                                <TextField
+                                    required
+                                    fullWidth
+                                    label="Номер телефону"
+                                    name="phoneNumber"
+                                    value={formData.phoneNumber}
+                                    onChange={handleChange}
+                                    placeholder="+380..."
+                                />
                             </Grid>
                             <Grid size={{ xs: 12 }}>
-                                <TextField required fullWidth label="Пароль" type="password" name="password" value={formData.password} onChange={handleChange} />
+                                <TextField
+                                    required
+                                    fullWidth
+                                    label="Пароль"
+                                    type="password"
+                                    name="password"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                />
                             </Grid>
                         </Grid>
 
-                        <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 4, mb: 2 }} disabled={success}>
+                        <Button
+                            type="submit"
+                            fullWidth
+                            variant="contained"
+                            size="large"
+                            sx={{ mt: 4, mb: 2 }}
+                            disabled={success}
+                        >
                             Зареєструватися
                         </Button>
 

@@ -1,72 +1,104 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import { jwtDecode } from 'jwt-decode';
 
-// Описуємо структуру даних, які лежать у твоєму JWT
-interface JwtPayload {
-    sub: string; // Це email (username), який ми клали в subject токена
-    role?: string; // Роль юзера (якщо вона додається в пейлоад на бекенді)
+export interface JwtPayload {
+    /** Subject of the token, typically the user's email or username */
+    sub: string;
+    /** User's assigned role (e.g., ROLE_USER, ROLE_ADMIN, ROLE_STO) */
+    role?: string;
+    /** Expiration timestamp in seconds */
     exp: number;
 }
 
-interface User {
+export interface AuthUser {
     email: string;
     role?: string;
 }
 
-interface AuthContextType {
-    user: User | null;
+export interface AuthContextType {
+    user: AuthUser | null;
     token: string | null;
+    isAuthenticated: boolean;
     login: (token: string) => void;
     logout: () => void;
-    isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+interface AuthProviderProps {
+    children: ReactNode;
+}
+
+/**
+ * Global Authentication Provider.
+ * Manages JWT verification, user session state, and localStorage synchronization.
+ */
+export const AuthProvider = ({ children }: AuthProviderProps) => {
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
+
+    // Wrapped in useCallback to maintain referential equality
+    const logout = useCallback(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        setToken(null);
+        setUser(null);
+    }, []);
+
+    const login = useCallback((newToken: string) => {
+        localStorage.setItem('token', newToken);
+        setToken(newToken);
+    }, []);
 
     useEffect(() => {
         if (token) {
             try {
                 const decoded = jwtDecode<JwtPayload>(token);
-                // Перевірка чи токен не прострочений
-                if (decoded.exp * 1000 < Date.now()) {
+                const currentTime = Date.now() / 1000;
+
+                // Validate token expiration
+                if (decoded.exp < currentTime) {
+                    console.warn('Authentication token expired. Logging out.');
                     logout();
                 } else {
                     setUser({ email: decoded.sub, role: decoded.role });
+
+                    // Centralize userRole synchronization if it exists in the token payload
+                    if (decoded.role) {
+                        localStorage.setItem('userRole', decoded.role);
+                    }
                 }
             } catch (error) {
-                console.error("Invalid token");
+                console.error('Invalid or corrupted JWT token:', error);
                 logout();
             }
         } else {
             setUser(null);
         }
-    }, [token]);
+    }, [token, logout]);
 
-    const login = (newToken: string) => {
-        localStorage.setItem('token', newToken);
-        setToken(newToken);
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userRole');
-        setToken(null);
-        setUser(null);
-    };
+    // Memoized context value prevents unnecessary re-renders of consumer components
+    const contextValue = useMemo<AuthContextType>(() => ({
+        user,
+        token,
+        isAuthenticated: !!token,
+        login,
+        logout
+    }), [user, token, login, logout]);
 
     return (
-        <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={contextValue}>
             {children}
         </AuthContext.Provider>
     );
 };
 
-// Хук для зручного використання контексту в компонентах
-export const useAuth = () => {
+/**
+ * Custom hook to consume the AuthContext safely.
+ * * @throws {Error} If used outside of an AuthProvider.
+ * @returns {AuthContextType} The current authentication state and methods.
+ */
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext);
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');

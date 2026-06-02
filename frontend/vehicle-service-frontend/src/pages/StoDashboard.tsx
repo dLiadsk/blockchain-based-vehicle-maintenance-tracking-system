@@ -1,27 +1,54 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Chip, Alert, CircularProgress, Button, Tabs, Tab, TextField
 } from '@mui/material';
+
 import api from '../services/api';
 import BlockchainSyncButton from '../components/BlockchainSyncButton';
+import type { ServiceRequest } from '../types';
 
-export default function StoDashboard() {
-    const [requests, setRequests] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [tabValue, setTabValue] = useState(0);
-    const [searchTerm, setSearchTerm] = useState('');
+// ============================================================================
+// TYPES
+// ============================================================================
+
+/**
+ * Extended Service Request specifically for STO dashboard.
+ * Includes customer information for search filtering.
+ */
+interface StoServiceRequest extends ServiceRequest {
+    customer?: {
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+    };
+}
+
+type ChipColor = "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning";
+
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
+/**
+ * Main dashboard for STO Administrators.
+ * Displays a sortable and filterable list of active, completed, and canceled service requests.
+ */
+export default function StoDashboard(): JSX.Element {
+    const [requests, setRequests] = useState<StoServiceRequest[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string>('');
+    const [tabValue, setTabValue] = useState<number>(0);
+    const [searchTerm, setSearchTerm] = useState<string>('');
     const navigate = useNavigate();
 
-    // Виносимо логіку завантаження в окрему функцію, щоб її можна було передати у кнопку синхронізації
     const fetchRequests = () => {
         setLoading(true);
-        api.get('/sto/requests')
+        api.get<StoServiceRequest[]>('/sto/requests')
             .then(res => setRequests(res.data))
             .catch(err => {
-                console.error(err);
+                console.error('Failed to load STO requests:', err);
                 setError('Не вдалося завантажити заявки');
             })
             .finally(() => setLoading(false));
@@ -34,28 +61,29 @@ export default function StoDashboard() {
     const finishedStatuses = ['Completed', 'COMPLETED', 'ReadyForPickup', 'Finalized'];
     const canceledStatuses = ['Canceled', 'CANCELLED'];
 
-    const getFilteredRequests = () => {
+    const getFilteredRequests = (): StoServiceRequest[] => {
         return requests.filter(req => {
             const status = req.status;
 
-            // 1. Фільтр по статусу
+            // 1. Status Filter
             let statusMatch = true;
             if (tabValue === 0) statusMatch = !finishedStatuses.includes(status) && !canceledStatuses.includes(status);
             else if (tabValue === 1) statusMatch = finishedStatuses.includes(status);
             else if (tabValue === 2) statusMatch = canceledStatuses.includes(status);
+            // tabValue === 3 means "All Requests", so statusMatch remains true
 
-            // 2. Фільтр по пошуку
+            // 2. Search Filter
             const lowerSearch = searchTerm.toLowerCase();
             const searchMatch =
                 req.id?.toString().includes(lowerSearch) ||
                 req.vehicle?.vin?.toLowerCase().includes(lowerSearch) ||
-                req.customer?.lastName?.toLowerCase().includes(lowerSearch);
+                (req.customer?.lastName || '').toLowerCase().includes(lowerSearch);
 
             return statusMatch && searchMatch;
         });
     };
 
-    const getStatusChipColor = (status: string) => {
+    const getStatusChipColor = (status: string): ChipColor => {
         if (finishedStatuses.includes(status)) return 'success';
         if (canceledStatuses.includes(status)) return 'error';
 
@@ -78,14 +106,19 @@ export default function StoDashboard() {
         }
     };
 
-    if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     const filteredRequests = getFilteredRequests();
     const activeCount = requests.filter(req => !finishedStatuses.includes(req.status) && !canceledStatuses.includes(req.status)).length;
 
     return (
         <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-            {/* Додано Flex-контейнер для розміщення заголовка та кнопки на одному рівні */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Робочий стіл СТО</Typography>
                 <BlockchainSyncButton onSuccess={fetchRequests} />
@@ -100,14 +133,15 @@ export default function StoDashboard() {
                         label="Пошук за ID, Прізвищем або VIN-кодом"
                         variant="outlined"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                     />
                 </Box>
             </Paper>
+
             <Paper sx={{ mb: 2 }} elevation={1}>
                 <Tabs
                     value={tabValue}
-                    onChange={(_, newValue) => setTabValue(newValue)}
+                    onChange={(_event: React.SyntheticEvent, newValue: number) => setTabValue(newValue)}
                     indicatorColor="primary"
                     textColor="primary"
                     variant="fullWidth"
