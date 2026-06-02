@@ -18,8 +18,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Core business service for managing vehicle service requests.
- * Orchestrates database operations, PDF generation, blockchain synchronization,
+ * Core business service for managing the lifecycle of vehicle service requests.
+ * Orchestrates local database operations, secure PDF generation, blockchain synchronization,
  * and maintains an immutable status history (Audit Trail).
  */
 @Service
@@ -36,31 +36,43 @@ public class ServiceRequestService {
     private final BlockchainService blockchainService;
     private final DtoMapper dtoMapper;
 
+    // ============================================================================
+    // CREATION & PAYMENT ENDPOINTS
+    // ============================================================================
+
     /**
-     * Creates a new service request, registers it on the blockchain, and logs the initial status.
+     * Creates a new service request, generates the initial PDF, registers it on the blockchain,
+     * and logs the initial status into the audit trail.
+     *
+     * @param dto           Payload containing VIN, selected STO, and problem description.
+     * @param customerEmail Email of the currently authenticated user.
+     * @return DTO representation of the newly created service request.
      */
     @Transactional
     public ServiceRequestResponse createRequest(CreateServiceRequest dto, String customerEmail) throws Exception {
-        log.info("Processing new service request creation for user: {}", customerEmail);
+        log.info("Processing new service request creation for user: {} and VIN: {}", customerEmail, dto.getVin());
 
         User customer = userRepository.findByEmail(customerEmail)
-                .orElseThrow(() -> new RuntimeException("Customer not found"));
+                .orElseThrow(() -> new RuntimeException("Customer not found in the database."));
 
         Vehicle vehicle = vehicleRepository.findByVin(dto.getVin())
                 .orElseThrow(() -> new RuntimeException("Vehicle not found: " + dto.getVin()));
 
         if (!vehicle.getOwner().getId().equals(customer.getId())) {
-            throw new RuntimeException("Access denied: You are not the owner of this vehicle");
+            log.warn("Unauthorized request attempt: User {} is not the owner of VIN {}", customerEmail, dto.getVin());
+            throw new RuntimeException("Access denied: You are not the authorized owner of this vehicle.");
         }
 
         StoProfile stoProfile = stoProfileRepository.findById(dto.getStoId())
-                .orElseThrow(() -> new RuntimeException("Selected STO station not found"));
+                .orElseThrow(() -> new RuntimeException("Selected Service Station (STO) not found."));
 
-        // 1. Generate Request PDF
+        // 1. Generate Request PDF with cryptographic hash
         String pdfHash = pdfService.generateAndSaveServiceRequestPdf(
-                vehicle.getVin(),
+                vehicle,
+                stoProfile,
+                customer.getFirstName() + " " + customer.getLastName(),
                 dto.getDescription(),
-                customer.getFirstName() + " " + customer.getLastName()
+                dto.getMileage()
         );
 
         // 2. Blockchain Registration
@@ -82,23 +94,29 @@ public class ServiceRequestService {
 
         ServiceRequest savedRequest = requestRepository.save(request);
 
-        // 4. RECORD STATUS HISTORY (Audit Trail)
+        // 4. Record the initial state in the audit trail
         recordStatusChange(savedRequest, "RequestCreated", result.txHash());
 
-        log.info("Service request created successfully with JobId: {}", result.jobId());
+        log.info("Service request successfully created and secured on-chain. JobId: {}", result.jobId());
         return dtoMapper.toServiceRequestResponse(savedRequest);
     }
 
     /**
-     * Processes an online payment and returns a structured payment response.
+     * Processes an online deposit payment, generates a digital receipt, and syncs the status
+     * with the smart contract.
+     *
+     * @param requestId     The ID of the service request.
+     * @param customerEmail The email of the paying customer.
+     * @return Payment confirmation details including the transaction hash.
      */
     @Transactional
     public PaymentResponse payOnline(Long requestId, String customerEmail) throws Exception {
-        log.info("Processing online payment for request ID: {}", requestId);
+        log.info("Processing online payment for request ID: {} by user: {}", requestId, customerEmail);
 
         ServiceRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Request not found"));
+                .orElseThrow(() -> new RuntimeException("Service request not found."));
 
+        // Mocking an external payment gateway transaction ID
         String transactionId = "PAY-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         String receiptHash = pdfService.generateOnlineReceiptPdf(
@@ -117,7 +135,7 @@ public class ServiceRequestService {
 
         recordStatusChange(request, "DepositPaid", txHash);
 
-        // Тепер використовуємо наш PaymentResponse
+        log.info("Online payment successful for request ID: {}. TxHash: {}", requestId, txHash);
         return PaymentResponse.builder()
                 .txHash(txHash)
                 .paymentDate(LocalDateTime.now())
@@ -125,118 +143,112 @@ public class ServiceRequestService {
                 .build();
     }
 
-    /**
-     * Helper method to record status transitions in the history table.
-     */
-    private void recordStatusChange(ServiceRequest request, String status, String txHash) {
-        StatusHistory history = StatusHistory.builder()
-                .serviceRequest(request)
-                .status(status)
-                .blockchainTxHash(txHash)
-                .build();
-        statusHistoryRepository.save(history);
-        log.debug("Status history recorded: {} for Request ID: {}", status, request.getId());
-    }
+    // ============================================================================
+    // RETRIEVAL & ACTIONS
+    // ============================================================================
 
-    // Additional read methods (getMyRequests, getRequestDetails) would go here...
+    @Transactional(readOnly = true)
     public List<ServiceRequestResponse> getRequestsByCustomer(String email) {
+        log.info("Fetching service requests for customer: {}", email);
         User user = userRepository.findByEmail(email).orElseThrow();
         return requestRepository.findAllByCustomerId(user.getId()).stream()
                 .map(dtoMapper::toServiceRequestResponse)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Retrieves detailed information about a specific request.
-     * Includes security checks to ensure only the owner or the assigned STO can view it.
-     */
     @Transactional(readOnly = true)
     public ServiceRequestResponse getRequestDetails(Long requestId, String currentUserEmail) {
         ServiceRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Service request not found with ID: " + requestId));
 
         User currentUser = userRepository.findByEmail(currentUserEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
 
-        // Security Check: Is the user the owner OR is the user the admin of the assigned STO?
+        // Security Validation
         boolean isOwner = request.getCustomer().getId().equals(currentUser.getId());
         boolean isAssignedSto = currentUser.getStoProfile() != null &&
                 request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
 
         if (!isOwner && !isAssignedSto && !currentUser.getRole().equals(UserRole.ROLE_ADMIN)) {
             log.warn("Access denied for user {} to request ID {}", currentUserEmail, requestId);
-            throw new RuntimeException("Access denied: You are not authorized to view this request");
+            throw new RuntimeException("Access denied: You are not authorized to view this request.");
         }
 
         return dtoMapper.toServiceRequestResponse(request);
     }
 
     /**
-     * Cancels a service request if it hasn't been processed or paid for yet.
-     * Synchronizes the cancellation with the blockchain.
+     * Cancels an active service request if it hasn't progressed past the inspection phase.
+     * Updates both the local database and the smart contract.
      */
     @Transactional
     public ServiceRequestResponse cancelRequest(Long requestId, String customerEmail, String reason) throws Exception {
         log.info("User {} is attempting to cancel request ID {} with reason: {}", customerEmail, requestId, reason);
 
         ServiceRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Service request not found."));
 
         User currentUser = userRepository.findByEmail(customerEmail)
-                .orElseThrow(() -> new RuntimeException("Користувача не знайдено"));
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
 
         boolean isOwner = request.getCustomer().getId().equals(currentUser.getId());
         boolean isAssignedSto = currentUser.getStoProfile() != null &&
                 request.getStoProfile().getId().equals(currentUser.getStoProfile().getId());
-        boolean isAdmin = currentUser.getRole().name().equals("ROLE_ADMIN");
-
-        List<String> cancellableStatuses = List.of(
-                "RequestCreated",
-                "AcceptedByAdmin",
-                "VehicleArrived"
-        );
+        boolean isAdmin = currentUser.getRole() == UserRole.ROLE_ADMIN;
 
         if (!isOwner && !isAssignedSto && !isAdmin) {
-            throw new RuntimeException("Відмовлено в доступі: ви не можете скасувати цю заявку");
+            throw new RuntimeException("Access denied: You are not authorized to cancel this request.");
         }
+
+        List<String> cancellableStatuses = List.of("RequestCreated", "AcceptedByAdmin", "VehicleArrived");
 
         if (!cancellableStatuses.contains(request.getStatus())) {
-            throw new RuntimeException("Цю заявку вже неможливо скасувати на поточному етапі (огляд вже проведено)");
+            throw new RuntimeException("This request can no longer be cancelled at this stage (inspection already completed).");
         }
 
-        String finalReason = (reason == null || reason.trim().isEmpty()) ? "Скасовано без вказання причини" : reason;
+        String finalReason = (reason == null || reason.trim().isEmpty()) ? "Cancelled without specifying a reason." : reason;
 
         String txHash = blockchainService.cancelRequest(request.getBlockchainJobId(), finalReason);
 
-        request.setArrivalInstructions(reason);
+        request.setArrivalInstructions(finalReason); // Repurposing field or logging reason
         request.setStatus("CANCELLED");
         request.setBlockchainTxHash(txHash);
         ServiceRequest savedRequest = requestRepository.save(request);
 
         recordStatusChange(savedRequest, "CANCELLED", txHash);
 
+        log.info("Request ID {} successfully cancelled.", requestId);
         return dtoMapper.toServiceRequestResponse(savedRequest);
     }
 
+    // ============================================================================
+    // AUDIT & INTEGRITY
+    // ============================================================================
+
+    /**
+     * Verifies the cryptographic integrity of a specific physical document file
+     * against the immutable hash stored in the database/blockchain.
+     */
     @Transactional(readOnly = true)
     public IntegrityCheckResponse verifyDocumentIntegrity(Long requestId, String docType) throws Exception {
-        ServiceRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Заявку не знайдено"));
+        log.info("Verifying document integrity for request ID: {}, Document Type: {}", requestId, docType);
 
-        // 1. Додано підтримку final_settlement
+        ServiceRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Service request not found."));
+
         String originalHash = switch (docType.toLowerCase()) {
             case "service_request" -> request.getPdfHash();
             case "inspection_report" -> request.getInspectionPdfHash();
             case "deposit_receipt" -> request.getPaymentReceiptPdfHash();
             case "work_report" -> request.getWorkReportPdfHash();
             case "final_settlement" -> request.getFinalReceiptPdfHash();
-            default -> throw new RuntimeException("Невідомий тип документа: " + docType);
+            default -> throw new RuntimeException("Unknown document type requested: " + docType);
         };
 
         if (originalHash == null || originalHash.isEmpty()) {
             return IntegrityCheckResponse.builder()
                     .valid(false)
-                    .message("Документ ще не згенеровано або не збережено в блокчейн.")
+                    .message("Document has not been generated or secured on the blockchain yet.")
                     .build();
         }
 
@@ -245,28 +257,43 @@ public class ServiceRequestService {
         String exactFileName = filePrefix + "_" + originalHash + ".pdf";
         Path filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
 
-        // 2. Розумна перевірка для завдатку: якщо оплата була онлайн, файл має інший префікс
+        // Smart fallback logic for deposit receipts (online vs offline naming)
         if (filePrefix.equals("deposit_receipt") && !Files.exists(filePath)) {
             exactFileName = "online_receipt_" + originalHash + ".pdf";
             filePath = Paths.get("storage/requests/" + vin + "/" + exactFileName);
         }
 
         if (!Files.exists(filePath)) {
+            log.error("Integrity failure: File physically missing from server storage. Path: {}", filePath);
             return IntegrityCheckResponse.builder()
                     .valid(false)
-                    .message("Файл втрачено або видалено з сервера!")
+                    .message("File is missing or deleted from the server storage!")
                     .build();
         }
 
         String currentHash = pdfService.calculateFileHash(filePath);
-
         boolean isValid = currentHash.equals(originalHash);
 
         return IntegrityCheckResponse.builder()
                 .valid(isValid)
                 .currentFileHash(currentHash)
                 .originalBlockchainHash(originalHash)
-                .message(isValid ? "Цілісність підтверджено: файл не змінювався." : "УВАГА: Хеш не співпадає! Файл був підроблений.")
+                .message(isValid ? "Integrity confirmed: The file has not been altered."
+                        : "WARNING: Hash mismatch! The file has been tampered with or corrupted.")
                 .build();
+    }
+
+    /**
+     * Helper method to securely record status transitions in the history table.
+     */
+    private void recordStatusChange(ServiceRequest request, String status, String txHash) {
+        StatusHistory history = StatusHistory.builder()
+                .serviceRequest(request)
+                .status(status)
+                .blockchainTxHash(txHash)
+                .changedAt(LocalDateTime.now())
+                .build();
+        statusHistoryRepository.save(history);
+        log.info("Status history recorded: {} for Request ID: {}", status, request.getId());
     }
 }

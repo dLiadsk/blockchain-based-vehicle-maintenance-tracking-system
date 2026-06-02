@@ -8,12 +8,23 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 
 /**
- * Mapper component for converting Entities to DTOs.
- * Updated to include blockchain metadata, financial data, and status history audit trail.
+ * Utility component responsible for mapping internal JPA Entities to public-facing Data Transfer Objects (DTOs).
+ * Ensures that sensitive entity data is hidden and that complex relationships are flattened for API responses.
+ * Includes mapping for blockchain metadata, financial data, and cryptographic document hashes.
  */
 @Component
 public class DtoMapper {
 
+    // ============================================================================
+    // USER & STO PROFILES
+    // ============================================================================
+
+    /**
+     * Converts a User entity to a safe UserResponse DTO, omitting passwords and sensitive data.
+     *
+     * @param user The internal User JPA entity.
+     * @return The public-facing UserResponse DTO, or null if input is null.
+     */
     public UserResponse toUserResponse(User user) {
         if (user == null) return null;
 
@@ -28,6 +39,12 @@ public class DtoMapper {
                 .build();
     }
 
+    /**
+     * Converts a StoProfile entity to a StoProfileResponse DTO.
+     *
+     * @param profile The internal StoProfile JPA entity.
+     * @return The public-facing StoProfileResponse DTO, or null if input is null.
+     */
     public StoProfileResponse toStoResponse(StoProfile profile) {
         if (profile == null) return null;
 
@@ -42,16 +59,30 @@ public class DtoMapper {
                 .build();
     }
 
+    // ============================================================================
+    // CORE BUSINESS LOGIC (SERVICE REQUESTS & VEHICLES)
+    // ============================================================================
+
+    /**
+     * Converts a complex ServiceRequest entity into a comprehensive ServiceRequestResponse DTO.
+     * Maps all related entities, blockchain metadata, and nested status history.
+     *
+     * @param request The internal ServiceRequest JPA entity.
+     * @return The comprehensive ServiceRequestResponse DTO, or null if input is null.
+     */
     public ServiceRequestResponse toServiceRequestResponse(ServiceRequest request) {
         if (request == null) return null;
 
         return ServiceRequestResponse.builder()
+                // Basic Info
                 .id(request.getId())
                 .description(request.getDescription())
                 .status(request.getStatus())
                 .createdAt(request.getCreatedAt())
                 .arrivalInstructions(request.getArrivalInstructions())
                 .mechanic(request.getMechanic())
+                .workTypes(request.getWorkTypes())
+                .mileage(request.getMileage())
 
                 // Blockchain Metadata
                 .blockchainJobId(request.getBlockchainJobId())
@@ -62,7 +93,7 @@ public class DtoMapper {
                 .depositAmount(request.getDepositAmount())
 
                 // Document Audit Trail (SHA-256 Hashes)
-                .pdfHash(request.getPdfHash()) // Initial request
+                .pdfHash(request.getPdfHash())
                 .inspectionPdfHash(request.getInspectionPdfHash())
                 .paymentReceiptPdfHash(request.getPaymentReceiptPdfHash())
                 .workReportPdfHash(request.getWorkReportPdfHash())
@@ -73,8 +104,7 @@ public class DtoMapper {
                 .customer(toUserResponse(request.getCustomer()))
                 .manager(toUserResponse(request.getManager()))
                 .sto(toStoResponse(request.getStoProfile()))
-                .workTypes(request.getWorkTypes())
-                .mileage(request.getMileage())
+
                 // Status History (Audit Trail for Frontend Timeline)
                 .statusHistory(request.getStatusHistory() != null ?
                         request.getStatusHistory().stream()
@@ -82,19 +112,34 @@ public class DtoMapper {
                                 .collect(Collectors.toList()) : Collections.emptyList())
                 .build();
     }
-    public VehicleResponse toVehicleResponse(Vehicle vehicle){
+
+    /**
+     * Converts a Vehicle entity to a VehicleResponse DTO.
+     *
+     * @param vehicle The internal Vehicle JPA entity.
+     * @return The public-facing VehicleResponse DTO, or null if input is null.
+     */
+    public VehicleResponse toVehicleResponse(Vehicle vehicle) {
         if (vehicle == null) return null;
+
         return VehicleResponse.builder()
                 .vin(vehicle.getVin())
+                .brand(vehicle.getBrand())
+                .model(vehicle.getModel())
                 .year(vehicle.getYear())
                 .vehicleType(vehicle.getVehicleType())
-                .brand(vehicle.getBrand())
-                .mileage(vehicle.getMileage())
                 .number(vehicle.getNumber())
-                .model(vehicle.getModel())
+                .mileage(vehicle.getMileage())
                 .build();
     }
 
+    /**
+     * Converts a StatusHistory entity to a StatusHistoryResponse DTO.
+     * Extracts timeline events and their corresponding blockchain transaction hashes.
+     *
+     * @param history The internal StatusHistory JPA entity.
+     * @return The public-facing StatusHistoryResponse DTO, or null if input is null.
+     */
     public StatusHistoryResponse toStatusHistoryResponse(StatusHistory history) {
         if (history == null) return null;
 
