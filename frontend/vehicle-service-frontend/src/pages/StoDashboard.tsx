@@ -1,13 +1,12 @@
-import React, { useState, useEffect, type JSX } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, {useState, useEffect, type JSX} from 'react';
+import {useNavigate} from 'react-router-dom';
 import {
-    Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
+    Box, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Chip, Alert, CircularProgress, Button, Tabs, Tab, TextField
 } from '@mui/material';
 
 import api from '../services/api';
-import BlockchainSyncButton from '../components/BlockchainSyncButton';
-import type { ServiceRequest } from '../types';
+import type {ServiceRequest} from '../types';
 
 // ============================================================================
 // TYPES
@@ -80,7 +79,12 @@ export default function StoDashboard(): JSX.Element {
                 (req.customer?.lastName || '').toLowerCase().includes(lowerSearch);
 
             return statusMatch && searchMatch;
-        });
+        })
+            .sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+            });
     };
 
     const getStatusChipColor = (status: string): ChipColor => {
@@ -108,8 +112,8 @@ export default function StoDashboard(): JSX.Element {
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}>
-                <CircularProgress />
+            <Box sx={{display: 'flex', justifyContent: 'center', mt: 10}}>
+                <CircularProgress/>
             </Box>
         );
     }
@@ -118,16 +122,12 @@ export default function StoDashboard(): JSX.Element {
     const activeCount = requests.filter(req => !finishedStatuses.includes(req.status) && !canceledStatuses.includes(req.status)).length;
 
     return (
-        <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Робочий стіл СТО</Typography>
-                <BlockchainSyncButton onSuccess={fetchRequests} />
-            </Box>
+        <Box sx={{p: 3, maxWidth: 1200, mx: 'auto'}}>
 
-            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+            {error && <Alert severity="error" sx={{mb: 3}}>{error}</Alert>}
 
-            <Paper sx={{ mb: 1 }} elevation={1}>
-                <Box sx={{ p: 2 }}>
+            <Paper sx={{mb: 1}} elevation={1}>
+                <Box sx={{p: 2}}>
                     <TextField
                         fullWidth
                         label="Пошук за ID, Прізвищем або VIN-кодом"
@@ -138,7 +138,7 @@ export default function StoDashboard(): JSX.Element {
                 </Box>
             </Paper>
 
-            <Paper sx={{ mb: 2 }} elevation={1}>
+            <Paper sx={{mb: 2}} elevation={1}>
                 <Tabs
                     value={tabValue}
                     onChange={(_event: React.SyntheticEvent, newValue: number) => setTabValue(newValue)}
@@ -146,28 +146,28 @@ export default function StoDashboard(): JSX.Element {
                     textColor="primary"
                     variant="fullWidth"
                 >
-                    <Tab label={`Активні (${activeCount})`} />
-                    <Tab label="Завершені / Готові" />
-                    <Tab label="Скасовані" />
-                    <Tab label={`Усі заявки (${requests.length})`} />
+                    <Tab label={`Активні (${activeCount})`}/>
+                    <Tab label="Завершені / Готові"/>
+                    <Tab label="Скасовані"/>
+                    <Tab label={`Усі заявки (${requests.length})`}/>
                 </Tabs>
             </Paper>
 
             <TableContainer component={Paper} elevation={3}>
                 <Table>
-                    <TableHead sx={{ bgcolor: 'grey.200' }}>
+                    <TableHead sx={{bgcolor: 'grey.200'}}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>ID / Дата</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Автомобіль</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Проблема</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Статус</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Дія</TableCell>
+                            <TableCell sx={{fontWeight: 'bold'}}>ID / Дата</TableCell>
+                            <TableCell sx={{fontWeight: 'bold'}}>Автомобіль</TableCell>
+                            <TableCell sx={{fontWeight: 'bold'}}>Проблема</TableCell>
+                            <TableCell sx={{fontWeight: 'bold'}}>Статус</TableCell>
+                            <TableCell align="right" sx={{fontWeight: 'bold'}}>Дія</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {filteredRequests.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                                <TableCell colSpan={5} align="center" sx={{py: 3, color: 'text.secondary'}}>
                                     Заявки у цій категорії відсутні
                                 </TableCell>
                             </TableRow>
@@ -177,21 +177,21 @@ export default function StoDashboard(): JSX.Element {
                                     key={req.id}
                                     hover
                                     onClick={() => navigate(`/sto/requests/${req.id}`)}
-                                    sx={{ cursor: 'pointer' }}
+                                    sx={{cursor: 'pointer'}}
                                 >
                                     <TableCell>
-                                        <strong>#{req.id}</strong><br />
-                                        <span style={{ fontSize: '0.8rem', color: 'gray' }}>
-                                            {req.createdAt ? new Date(req.createdAt).toLocaleDateString('uk-UA') : '---'}
+                                        <strong>#{req.id}</strong><br/>
+                                        <span style={{fontSize: '0.8rem', color: 'gray'}}>
+                                            {req.createdAt ? new Date(req.createdAt).toLocaleString('uk-UA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '---'}
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        {req.vehicle?.brand} {req.vehicle?.model}<br />
-                                        <span style={{ fontSize: '0.8rem', color: 'gray', fontFamily: 'monospace' }}>
+                                        {req.vehicle?.brand} {req.vehicle?.model}<br/>
+                                        <span style={{fontSize: '0.8rem', color: 'gray', fontFamily: 'monospace'}}>
                                             {req.vehicle?.vin}
                                         </span>
                                     </TableCell>
-                                    <TableCell sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    <TableCell sx={{maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis'}}>
                                         {req.description}
                                     </TableCell>
                                     <TableCell>
@@ -200,7 +200,7 @@ export default function StoDashboard(): JSX.Element {
                                             color={getStatusChipColor(req.status)}
                                             variant="outlined"
                                             size="small"
-                                            sx={{ fontWeight: 'bold' }}
+                                            sx={{fontWeight: 'bold'}}
                                         />
                                     </TableCell>
                                     <TableCell align="right">

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Service for managing vehicle-related operations and blockchain registration.
@@ -28,7 +29,12 @@ public class VehicleService {
     private final ServiceRequestRepository requestRepository;
 
     /**
-     * Registers a new vehicle both in the local database and on the blockchain.
+     * Registers a new vehicle or claims a vehicle recovered from the blockchain.
+     * Prevents duplicate registrations and links recovered service history to the new owner.
+     *
+     * @param request    The vehicle registration payload.
+     * @param ownerEmail The email of the user registering the vehicle.
+     * @return The registered or claimed Vehicle entity.
      */
     @Transactional
     public Vehicle registerNewVehicle(VehicleRequest request, String ownerEmail) throws Exception {
@@ -37,13 +43,51 @@ public class VehicleService {
         User currentUser = userRepository.findByEmail(ownerEmail)
                 .orElseThrow(() -> new RuntimeException("User not found: " + ownerEmail));
 
-        // 1. Register on Blockchain
-        // In a real scenario, passportHash should be a real document hash.
-        String passportHash = "PASSPORT_HASH_" + request.getVin();
+        Optional<Vehicle> existingOpt = vehicleRepository.findByVin(request.getVin());
+
+        if (existingOpt.isPresent()) {
+            Vehicle existingVehicle = existingOpt.get();
+
+            // Check if the vehicle is a recovered phantom record (owner is null)
+            if (existingVehicle.getOwner() == null) {
+                log.info("Claiming recovered vehicle with VIN {} for user {}", request.getVin(), ownerEmail);
+
+                // 1. Update placeholder details with actual user input
+                existingVehicle.setNumber(request.getNumber());
+                existingVehicle.setBrand(request.getBrand());
+                existingVehicle.setModel(request.getModel());
+                existingVehicle.setYear(request.getYear());
+                existingVehicle.setMileage(request.getMileage());
+                existingVehicle.setVehicleType(request.getVehicleType());
+                existingVehicle.setOwner(currentUser);
+
+                Vehicle updatedVehicle = vehicleRepository.save(existingVehicle);
+
+                // 2. Link orphaned service requests to the newly assigned owner
+                List<ServiceRequest> orphanRequests = requestRepository.findAllByVehicleOrderByCreatedAtDesc(updatedVehicle);
+                if (!orphanRequests.isEmpty()) {
+                    orphanRequests.forEach(req -> req.setCustomer(currentUser));
+                    requestRepository.saveAll(orphanRequests);
+                    log.info("Linked {} recovered requests to user {}", orphanRequests.size(), ownerEmail);
+                }
+
+                // Note: Skipping blockchainService.registerVehicle() as the record already exists on-chain
+                return updatedVehicle;
+            } else {
+                log.warn("Attempted to register an already owned vehicle with VIN {}", request.getVin());
+                throw new IllegalArgumentException("A vehicle with this VIN is already registered.");
+            }
+        }
+
+        // Standard registration flow for a completely new vehicle
+        log.info("Registering completely new vehicle with VIN {}", request.getVin());
+
+        // 1. Register on the blockchain
+        String passportHash = "PASSPORT_HASH_" + request.getVin(); // Placeholder for actual document hashing
         String txHash = blockchainService.registerVehicle(request.getVin(), passportHash);
 
-        // 2. Save to local database
-        Vehicle vehicle = Vehicle.builder()
+        // 2. Persist in the local database
+        Vehicle newVehicle = Vehicle.builder()
                 .vin(request.getVin())
                 .number(request.getNumber())
                 .brand(request.getBrand())
@@ -55,8 +99,7 @@ public class VehicleService {
                 .blockchainTxHash(txHash)
                 .build();
 
-        log.info("Vehicle with VIN {} successfully registered on blockchain and DB", request.getVin());
-        return vehicleRepository.save(vehicle);
+        return vehicleRepository.save(newVehicle);
     }
 
     /**
